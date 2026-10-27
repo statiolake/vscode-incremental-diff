@@ -1,0 +1,367 @@
+{
+  "name": "vscode-incremental-diff",
+  "displayName": "Incremental Diff",
+  "description": "Review any git diff with per-file reviewed checkboxes and see only what changed since you reviewed a file.",
+  "version": "0.1.0",
+  "publisher": "statiolake",
+  "license": "MIT",
+  "author": "statiolake",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/statiolake/vscode-incremental-diff.git"
+  },
+  "homepage": "https://github.com/statiolake/vscode-incremental-diff#readme",
+  "bugs": {
+    "url": "https://github.com/statiolake/vscode-incremental-diff/issues"
+  },
+  "keywords": [
+    "review",
+    "diff",
+    "git",
+    "viewed",
+    "incremental"
+  ],
+  "engines": {
+    "vscode": "^1.96.0"
+  },
+  "categories": [
+    "SCM Providers",
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./dist/extension.js",
+  "extensionKind": [
+    "workspace"
+  ],
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "incrementalDiff",
+          "title": "Incremental Diff",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "incrementalDiff": [
+        {
+          "id": "incrementalDiff.files",
+          "name": "Changed Files"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "incrementalDiff.files",
+        "contents": "Review a git diff file by file. Reviewed files stay checked until they change again.\n[Open Branch Changes](command:incrementalDiff.openBranchChanges)\n[Open Diff…](command:incrementalDiff.openDiff)",
+        "when": "!incrementalDiff.active"
+      }
+    ],
+    "commands": [
+      {
+        "command": "incrementalDiff.openDiff",
+        "title": "Open Diff…",
+        "category": "Incremental Diff",
+        "icon": "$(git-compare)"
+      },
+      {
+        "command": "incrementalDiff.openBranchChanges",
+        "title": "Open Branch Changes",
+        "category": "Incremental Diff",
+        "icon": "$(git-branch)"
+      },
+      {
+        "command": "incrementalDiff.openAllChanges",
+        "title": "Open All Changes",
+        "category": "Incremental Diff",
+        "icon": "$(diff-multiple)"
+      },
+      {
+        "command": "incrementalDiff.openUnreviewedChanges",
+        "title": "Open Unreviewed Changes",
+        "category": "Incremental Diff",
+        "icon": "$(eye)"
+      },
+      {
+        "command": "incrementalDiff.openChangesSinceReview",
+        "title": "Open Changes Since Review",
+        "category": "Incremental Diff",
+        "icon": "$(history)"
+      },
+      {
+        "command": "incrementalDiff.markReviewedAndNext",
+        "title": "Mark Reviewed and Next",
+        "category": "Incremental Diff",
+        "icon": "$(check)"
+      },
+      {
+        "command": "incrementalDiff.toggleChangesSinceReview",
+        "title": "Toggle Full Diff / Changes Since Review",
+        "category": "Incremental Diff",
+        "icon": "$(history)"
+      },
+      {
+        "command": "incrementalDiff.refresh",
+        "title": "Refresh",
+        "category": "Incremental Diff",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "incrementalDiff.closeReview",
+        "title": "Close Review",
+        "category": "Incremental Diff",
+        "icon": "$(close)"
+      },
+      {
+        "command": "incrementalDiff.clearReviewed",
+        "title": "Clear Reviewed Marks",
+        "category": "Incremental Diff",
+        "icon": "$(clear-all)"
+      },
+      {
+        "command": "incrementalDiff.viewAsTree",
+        "title": "View as Tree",
+        "category": "Incremental Diff",
+        "icon": "$(list-tree)"
+      },
+      {
+        "command": "incrementalDiff.viewAsList",
+        "title": "View as List",
+        "category": "Incremental Diff",
+        "icon": "$(list-flat)"
+      },
+      {
+        "command": "incrementalDiff.openFileDiff",
+        "title": "Open Diff"
+      },
+      {
+        "command": "incrementalDiff.openFullDiff",
+        "title": "Open Full Diff",
+        "category": "Incremental Diff",
+        "icon": "$(diff)"
+      },
+      {
+        "command": "incrementalDiff.openFileChangesSinceReview",
+        "title": "Open Changes Since Review",
+        "icon": "$(history)"
+      },
+      {
+        "command": "incrementalDiff.openFile",
+        "title": "Open File",
+        "icon": "$(go-to-file)"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "incrementalDiff.openAllChanges",
+          "when": "incrementalDiff.active"
+        },
+        {
+          "command": "incrementalDiff.openUnreviewedChanges",
+          "when": "incrementalDiff.active"
+        },
+        {
+          "command": "incrementalDiff.openChangesSinceReview",
+          "when": "incrementalDiff.active"
+        },
+        {
+          "command": "incrementalDiff.markReviewedAndNext",
+          "when": "incrementalDiff.active"
+        },
+        {
+          "command": "incrementalDiff.toggleChangesSinceReview",
+          "when": "incrementalDiff.activeFileChanged"
+        },
+        {
+          "command": "incrementalDiff.refresh",
+          "when": "incrementalDiff.active"
+        },
+        {
+          "command": "incrementalDiff.closeReview",
+          "when": "incrementalDiff.active"
+        },
+        {
+          "command": "incrementalDiff.clearReviewed",
+          "when": "incrementalDiff.active"
+        },
+        {
+          "command": "incrementalDiff.viewAsTree",
+          "when": "false"
+        },
+        {
+          "command": "incrementalDiff.viewAsList",
+          "when": "false"
+        },
+        {
+          "command": "incrementalDiff.openFileDiff",
+          "when": "false"
+        },
+        {
+          "command": "incrementalDiff.openFullDiff",
+          "when": "incrementalDiff.activeFile"
+        },
+        {
+          "command": "incrementalDiff.openFileChangesSinceReview",
+          "when": "false"
+        },
+        {
+          "command": "incrementalDiff.openFile",
+          "when": "false"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "incrementalDiff.openAllChanges",
+          "group": "navigation@1",
+          "when": "view == incrementalDiff.files && incrementalDiff.active"
+        },
+        {
+          "command": "incrementalDiff.openChangesSinceReview",
+          "group": "navigation@2",
+          "when": "view == incrementalDiff.files && incrementalDiff.active"
+        },
+        {
+          "command": "incrementalDiff.refresh",
+          "group": "navigation@3",
+          "when": "view == incrementalDiff.files && incrementalDiff.active"
+        },
+        {
+          "command": "incrementalDiff.viewAsList",
+          "group": "navigation@4",
+          "when": "view == incrementalDiff.files && incrementalDiff.viewMode != flat"
+        },
+        {
+          "command": "incrementalDiff.viewAsTree",
+          "group": "navigation@4",
+          "when": "view == incrementalDiff.files && incrementalDiff.viewMode == flat"
+        },
+        {
+          "command": "incrementalDiff.closeReview",
+          "group": "navigation@5",
+          "when": "view == incrementalDiff.files && incrementalDiff.active"
+        },
+        {
+          "command": "incrementalDiff.openDiff",
+          "group": "1_open@1",
+          "when": "view == incrementalDiff.files"
+        },
+        {
+          "command": "incrementalDiff.openBranchChanges",
+          "group": "1_open@2",
+          "when": "view == incrementalDiff.files"
+        },
+        {
+          "command": "incrementalDiff.openUnreviewedChanges",
+          "group": "2_changes@1",
+          "when": "view == incrementalDiff.files && incrementalDiff.active"
+        },
+        {
+          "command": "incrementalDiff.clearReviewed",
+          "group": "3_state@1",
+          "when": "view == incrementalDiff.files && incrementalDiff.active"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "incrementalDiff.openFile",
+          "group": "inline@1",
+          "when": "view == incrementalDiff.files && viewItem =~ /^file/"
+        },
+        {
+          "command": "incrementalDiff.openFileChangesSinceReview",
+          "group": "inline@2",
+          "when": "view == incrementalDiff.files && viewItem == file:changed"
+        },
+        {
+          "command": "incrementalDiff.openFullDiff",
+          "group": "navigation@1",
+          "when": "view == incrementalDiff.files && viewItem =~ /^file/"
+        },
+        {
+          "command": "incrementalDiff.openFileChangesSinceReview",
+          "group": "navigation@2",
+          "when": "view == incrementalDiff.files && viewItem == file:changed"
+        },
+        {
+          "command": "incrementalDiff.openFile",
+          "group": "navigation@3",
+          "when": "view == incrementalDiff.files && viewItem =~ /^file/"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "incrementalDiff.toggleChangesSinceReview",
+          "group": "navigation@1",
+          "when": "incrementalDiff.activeFileChanged"
+        },
+        {
+          "command": "incrementalDiff.markReviewedAndNext",
+          "group": "navigation@2",
+          "when": "incrementalDiff.activeFile && (isInDiffEditor || activeEditor == multiDiffEditor)"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Incremental Diff",
+      "properties": {
+        "incrementalDiff.baseBranch": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Branch that **Open Branch Changes** compares against, e.g. `origin/develop`. Empty detects it: `upstream/HEAD` or `origin/HEAD`, then `main` / `master` on those remotes, then a local `main` / `master`."
+        },
+        "incrementalDiff.viewMode": {
+          "type": "string",
+          "enum": [
+            "tree",
+            "flat"
+          ],
+          "enumDescriptions": [
+            "Group files by folder.",
+            "List files by path."
+          ],
+          "default": "tree",
+          "description": "How the Changed Files view lists files."
+        },
+        "incrementalDiff.openChangesSinceReview": {
+          "type": "boolean",
+          "default": true,
+          "description": "Clicking a file that changed since it was reviewed opens only the changes since the review. Turn off to always open the full diff."
+        },
+        "incrementalDiff.autoRefresh": {
+          "type": "boolean",
+          "default": true,
+          "description": "Refresh the review when files are saved or the git state changes."
+        },
+        "incrementalDiff.refreshDelay": {
+          "type": "number",
+          "default": 500,
+          "minimum": 0,
+          "description": "Milliseconds to wait after the last change before refreshing."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run check && esbuild src/extension.ts --bundle --minify --platform=node --external:vscode --outfile=dist/extension.js",
+    "build": "esbuild src/extension.ts --bundle --platform=node --external:vscode --outfile=dist/extension.js",
+    "package": "vsce package",
+    "publish": "npm run publish:vsce && npm run publish:ovsx",
+    "check": "tsc --noEmit",
+    "test": "npm run test:compile && node --test dist-test/test/**/*.test.js",
+    "test:compile": "tsc -p tsconfig.test.json",
+    "publish:vsce": "vsce publish",
+    "publish:ovsx": "ovsx publish"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/vscode": "^1.96.0",
+    "@vscode/vsce": "^3.9.1",
+    "esbuild": "^0.24.2",
+    "ovsx": "^1.1.1",
+    "typescript": "^5.7.2"
+  }
+}

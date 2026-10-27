@@ -1,0 +1,8 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "outDir": "dist-test",
+    "rootDir": "."
+  },
+  "include": ["src/diffSpec.ts", "src/diff.ts", "src/git.ts", "src/branch.ts", "src/snapshot.ts", "src/state.ts", "src/treeModel.ts", "src/review.ts", "src/content.ts", "src/gitApi.ts", "test/**/*.ts"]
+}
