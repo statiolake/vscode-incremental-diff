@@ -2,7 +2,7 @@
   "name": "vscode-incremental-diff",
   "displayName": "Incremental Diff",
   "description": "Review any git diff with per-file reviewed checkboxes and see only what changed since you reviewed a file.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "statiolake",
   "license": "MIT",
   "author": "statiolake",
