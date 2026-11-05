@@ -311,7 +311,7 @@
         "incrementalDiff.baseBranch": {
           "type": "string",
           "default": "",
-          "markdownDescription": "Branch that **Open Branch Changes** compares against, e.g. `origin/develop`. Empty detects it: `upstream/HEAD` or `origin/HEAD`, then `main` / `master` on those remotes, then a local `main` / `master`."
+          "markdownDescription": "Branch that **Open Branch Changes** compares against, e.g. `origin/develop`. Empty detects the branch the current branch forked from: the local or remote-tracking branch whose merge base with `HEAD` is closest to `HEAD`."
         },
         "incrementalDiff.viewMode": {
           "type": "string",

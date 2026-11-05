@@ -31,7 +31,7 @@ An omitted side of a range means `HEAD`. Paths go after `--` (`main... -- src do
 
 When the right side is the work tree, untracked files (not ignored) are listed as added.
 
-**Open Branch Changes** is a shortcut for `--merge-base <base>`: everything since your branch left its base, including uncommitted and untracked work. The base is `incrementalDiff.baseBranch` if set; otherwise the default branch of the `upstream` or `origin` remote (`upstream/HEAD`, `origin/HEAD`, then `main` or `master` on those remotes), and finally a local `main` or `master`.
+**Open Branch Changes** is a shortcut for `--merge-base <base>`: everything since your branch left its base, including uncommitted and untracked work. The base is `incrementalDiff.baseBranch` if set; otherwise the branch your branch forked from: among all local and remote-tracking branches, the one whose merge base with `HEAD` is closest to `HEAD`. Your own branch, its upstream, same-named remote branches, and branches that already contain `HEAD` are skipped.
 
 Only one review is open at a time. It is reopened automatically when the window reloads.
 

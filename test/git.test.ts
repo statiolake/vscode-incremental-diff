@@ -81,19 +81,54 @@ describe("listing changes", () => {
     await assert.rejects(listChanges(repo.root, parseDiffSpec("nope..main")), DiffSpecError);
   });
 
-  test("branch changes run from the merge base with the default branch to the work tree", async () => {
-    assert.equal(await detectBaseBranch(repo.root), "main");
-    assert.equal(await detectBaseBranch(repo.root, " develop "), "develop");
-    repo.git("update-ref", "refs/remotes/origin/trunk", "main");
-    repo.git("symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/trunk");
-    assert.equal(await detectBaseBranch(repo.root), "origin/trunk");
+  test("branch changes run from the merge base with the base branch to the work tree", async () => {
     repo.write("wip.txt", "wip\n");
     try {
-      const result = await listChanges(repo.root, parseDiffSpec(branchChangesArgs("origin/trunk")));
+      const result = await listChanges(repo.root, parseDiffSpec(branchChangesArgs("main")));
       assert.deepEqual(summary(result.files), ["A added.ts", "D gone.md", "R old/name.ts -> new/name.ts", "M src/app.ts", "A wip.txt (untracked)"]);
     } finally {
       repo.remove("wip.txt");
     }
+  });
+});
+
+describe("detecting the base branch", () => {
+  const repo = new TempRepo();
+  before(() => {
+    repo.commit("root");
+    repo.git("switch", "-q", "-c", "feat-a");
+    repo.commit("a1");
+    repo.git("switch", "-q", "-c", "feat-b");
+    repo.commit("b1");
+    // An older push of feat-b itself is closer than feat-a but is not a fork point.
+    repo.git("update-ref", "refs/remotes/origin/feat-b", "HEAD");
+    repo.commit("b2");
+    // A branch forked from feat-b contains HEAD and must not be mistaken for its base.
+    repo.git("branch", "feat-c");
+    repo.git("switch", "-q", "feat-c");
+    repo.commit("c1");
+    repo.git("switch", "-q", "main");
+    repo.commit("m1");
+    repo.git("update-ref", "refs/remotes/origin/main", "HEAD");
+    repo.git("symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main");
+  });
+  after(() => repo.dispose());
+
+  test("picks the branch HEAD forked from", async () => {
+    repo.git("switch", "-q", "feat-b");
+    assert.equal(await detectBaseBranch(repo.root), "feat-a");
+    repo.git("switch", "-q", "feat-a");
+    const base = await detectBaseBranch(repo.root);
+    assert.ok(base === "main" || base === "origin/main", base);
+  });
+
+  test("a branch with no commits of its own is based on where it was created", async () => {
+    repo.git("switch", "-q", "-c", "fresh", "feat-a");
+    assert.equal(await detectBaseBranch(repo.root), "feat-a");
+  });
+
+  test("the configured branch wins", async () => {
+    assert.equal(await detectBaseBranch(repo.root, " develop "), "develop");
   });
 });
 
