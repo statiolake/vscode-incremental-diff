@@ -1,11 +1,13 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
 /** A throwaway git repository. */
 export class TempRepo {
-  readonly root = mkdtempSync(join(tmpdir(), "incremental-diff-"));
+  // Canonical, as git reports it: the OS temp dir may sit behind a symlink
+  // (macOS /var -> /private/var).
+  readonly root = realpathSync(mkdtempSync(join(tmpdir(), "incremental-diff-")));
 
   constructor() {
     this.git("init", "-q", "-b", "main");
