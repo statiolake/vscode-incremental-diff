@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { parseRawDiff } from "../src/diff";
+import { parseRawDiff } from "../src/core/diff";
 
 const a = "a".repeat(40);
 const b = "b".repeat(40);

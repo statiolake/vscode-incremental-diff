@@ -1,4 +1,6 @@
 import { DiffSpec, DiffSpecError, Endpoint, comparesWithWorktree, parseDiffSpec, tokenize } from "./diffSpec";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { git, splitZ } from "./git";
 
 export type FileStatus = "A" | "M" | "D" | "R" | "C" | "T" | "U";
@@ -34,6 +36,16 @@ export interface ChangedFile {
   newBlob?: string;
   /** Untracked work tree file reported as added. */
   untracked?: boolean;
+  /** Lines added and deleted (with `stats`); absent for binary files. */
+  added?: number;
+  deleted?: number;
+  /** Git sees binary content on either side (with `stats`). */
+  binary?: boolean;
+}
+
+export interface ListOptions {
+  /** Count added and deleted lines per file (`git diff --numstat`). */
+  stats?: boolean;
 }
 
 export interface DiffResult {
@@ -100,8 +112,13 @@ async function resolveSide(root: string, endpoint: Endpoint): Promise<ResolvedSi
       return endpoint;
     case "rev": {
       const sha = await resolveCommit(root, endpoint.rev);
-      if (!sha) throw new DiffSpecError(`Unknown revision: ${endpoint.rev}`);
-      return { kind: "commit", sha, label: endpoint.rev };
+      if (sha) return { kind: "commit", sha, label: endpoint.rev };
+      // The parent of a root commit (`X^!`, `X^..X`): nothing, the empty tree.
+      if (endpoint.rev.endsWith("^") && await resolveCommit(root, endpoint.rev.slice(0, -1))) {
+        const empty = (await git(root, ["hash-object", "-t", "tree", "--stdin"], { input: "" })).trim();
+        return { kind: "commit", sha: empty, label: `${endpoint.rev} (none)` };
+      }
+      throw new DiffSpecError(`Unknown revision: ${endpoint.rev}`);
     }
     case "mergeBase": {
       for (const rev of [endpoint.a, endpoint.b]) {
@@ -133,7 +150,7 @@ export function diffArgs(left: ResolvedSide, right: ResolvedSide, spec: DiffSpec
 }
 
 /** Lists the files changed by `spec`, with blob ids for both sides. */
-export async function listChanges(root: string, spec: DiffSpec): Promise<DiffResult> {
+export async function listChanges(root: string, spec: DiffSpec, options: ListOptions = {}): Promise<DiffResult> {
   const left = await resolveSide(root, spec.left);
   const right = await resolveSide(root, spec.right);
   const raw = parseRawDiff(await git(root, diffArgs(left, right, spec)));
@@ -162,6 +179,7 @@ export async function listChanges(root: string, spec: DiffSpec): Promise<DiffRes
     });
   }
 
+  if (options.stats) await addStats(root, left, right, spec, files);
   files.sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
   return { spec, left, right, files };
 }
@@ -180,4 +198,48 @@ export async function hashWorktreeFiles(root: string, paths: string[], write = f
     const single = await git(root, ["hash-object", "--no-filters", ...(write ? ["-w"] : []), "--", path], { allowFailure: true });
     return single?.trim() || undefined;
   }));
+}
+
+/** Parses `git diff --numstat -z`: added, deleted ("-" for binary) and the path (the new one for renames). */
+export function parseNumstat(output: string): Map<string, { added?: number; deleted?: number; binary?: boolean }> {
+  const fields = splitZ(output);
+  const stats = new Map<string, { added?: number; deleted?: number; binary?: boolean }>();
+  for (let i = 0; i < fields.length;) {
+    const [added, deleted, path] = fields[i].split("\t");
+    let name = path;
+    i++;
+    // A rename or copy: "added\tdeleted\t" then the old and new paths.
+    if (path === "" || path === undefined) {
+      name = fields[i + 1];
+      i += 2;
+    }
+    if (name === undefined) break;
+    stats.set(name, added === "-" ? { binary: true } : { added: Number(added), deleted: Number(deleted) });
+  }
+  return stats;
+}
+
+async function addStats(root: string, left: ResolvedSide, right: ResolvedSide, spec: DiffSpec, files: ChangedFile[]): Promise<void> {
+  const args = diffArgs(left, right, spec).map(arg => arg === "--raw" ? "--numstat" : arg);
+  const stats = parseNumstat(await git(root, args, { allowFailure: true }) ?? "");
+  await Promise.all(files.map(async file => {
+    const stat = stats.get(file.path);
+    if (stat) Object.assign(file, stat);
+    else if (file.untracked) Object.assign(file, await countLines(join(root, file.path)));
+  }));
+}
+
+/** An untracked file counted as all added (binary when it holds a NUL byte). */
+async function countLines(path: string): Promise<{ added?: number; deleted?: number; binary?: boolean }> {
+  try {
+    const content = await readFile(path);
+    if (content.includes(0)) return { binary: true };
+    if (content.length === 0) return { added: 0, deleted: 0 };
+    let lines = 0;
+    for (const byte of content) if (byte === 10) lines++;
+    if (content[content.length - 1] !== 10) lines++;
+    return { added: lines, deleted: 0 };
+  } catch {
+    return {};
+  }
 }

@@ -2,9 +2,9 @@ import "./installVscodeMock";
 import assert from "node:assert/strict";
 import { after, test } from "node:test";
 import type * as vscode from "vscode";
-import { ReviewController } from "../src/review";
-import { git } from "../src/git";
-import { Memento, ReviewStateStore } from "../src/state";
+import { ReviewController } from "../src/vscode/review";
+import { git } from "../src/core/git";
+import { Memento, ReviewStateStore } from "../src/core/state";
 import { TempRepo } from "./helpers";
 import { Uri, executed } from "./vscodeMock";
 

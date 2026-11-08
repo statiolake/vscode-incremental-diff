@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
-import { branchChangesArgs, detectBaseBranch } from "../src/branch";
-import { listChanges, resolveSpec } from "../src/diff";
-import { DiffSpecError, parseDiffSpec } from "../src/diffSpec";
-import { git } from "../src/git";
-import { DELETED, currentSnapshotValue, snapshotRef, takeSnapshots, writeSnapshotRef } from "../src/snapshot";
+import { branchChangesArgs, detectBaseBranch } from "../src/core/branch";
+import { listChanges, resolveSpec } from "../src/core/diff";
+import { DiffSpecError, parseDiffSpec } from "../src/core/diffSpec";
+import { git } from "../src/core/git";
+import { DELETED, currentSnapshotValue, snapshotRef, takeSnapshots, writeSnapshotRef } from "../src/core/snapshot";
 import { TempRepo } from "./helpers";
 
 const summary = (files: Array<{ status: string; path: string; oldPath?: string; untracked?: boolean }>) =>
@@ -181,4 +181,17 @@ describe("snapshots", () => {
     const snapshots = await takeSnapshots(repo.root, result.right, result.files);
     assert.equal(snapshots.get("a.txt"), (await git(repo.root, ["rev-parse", "HEAD:a.txt"])).trim());
   });
+});
+
+test("X^! on a root commit compares with nothing", async () => {
+  const fresh = new TempRepo();
+  try {
+    fresh.write("first.txt", "1\n");
+    const root = fresh.commit("root");
+    const result = await listChanges(fresh.root, await resolveSpec(fresh.root, `${root}^!`));
+    assert.equal(result.left.kind, "commit");
+    assert.deepEqual(result.files.map(file => [file.path, file.status]), [["first.txt", "A"]]);
+  } finally {
+    fresh.dispose();
+  }
 });

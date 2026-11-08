@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { DiffSpecError, describeSpec, parseDiffSpec, tokenize } from "../src/diffSpec";
+import { DiffSpecError, describeSpec, parseDiffSpec, tokenize } from "../src/core/diffSpec";
 
 test("tokenizes like a shell", () => {
   assert.deepEqual(tokenize(`  main...HEAD -- "src/a b.ts" 'it''s' c\\ d `), ["main...HEAD", "--", "src/a b.ts", "its", "c d"]);

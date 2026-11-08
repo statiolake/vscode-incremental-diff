@@ -2,9 +2,9 @@ import * as vscode from "vscode";
 import { BlobContentProvider, contentScheme } from "./content";
 import { getGitApi } from "./gitApi";
 import { ReviewController, OpenRequest, MultiDiffKind } from "./review";
-import { ReviewStateStore } from "./state";
+import { ReviewStateStore } from "../core/state";
 import { FileDecorations, FilesTreeProvider, checkboxChanges } from "./tree";
-import { ReviewFile, TreeNode } from "./treeModel";
+import { ReviewFile, TreeNode } from "../core/treeModel";
 
 export interface IncrementalDiffApi {
   readonly controller: ReviewController;

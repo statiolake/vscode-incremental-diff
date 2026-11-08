@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { Memento, ReviewStateStore, historyLimit, reviewScope, reviewStatus } from "../src/state";
+import { Memento, ReviewStateStore, historyLimit, reviewScope, reviewStatus } from "../src/core/state";
 
 class MemoryMemento implements Memento {
   readonly data = new Map<string, unknown>();

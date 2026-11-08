@@ -13,7 +13,7 @@ interface Manifest {
 
 const manifest = JSON.parse(readFileSync("package.json", "utf8")) as Manifest;
 const readme = readFileSync("README.md", "utf8");
-const source = readFileSync("src/extension.ts", "utf8");
+const source = readFileSync("src/vscode/extension.ts", "utf8");
 
 test("every menu entry refers to a contributed command", () => {
   const commands = new Set(manifest.contributes.commands.map(item => item.command));

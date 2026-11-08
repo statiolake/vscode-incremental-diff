@@ -1,9 +1,9 @@
 import * as path from "node:path";
 import * as vscode from "vscode";
-import { FileStatus } from "./diff";
+import { FileStatus } from "../core/diff";
 import { ReviewController } from "./review";
-import { ReviewStatus } from "./state";
-import { FolderNode, ReviewFile, TreeNode, ViewMode, buildTree, folderChecked } from "./treeModel";
+import { ReviewStatus } from "../core/state";
+import { FolderNode, ReviewFile, TreeNode, ViewMode, buildTree, folderChecked } from "../core/treeModel";
 
 /** Scheme of tree item resource URIs; they only carry decorations and icons. */
 export const itemScheme = "incremental-diff-item";

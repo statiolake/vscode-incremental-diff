@@ -1,28 +1,20 @@
 import * as path from "node:path";
 import * as vscode from "vscode";
-import { branchChangesArgs, detectBaseBranch } from "./branch";
 import { ContentSide, blobUri, contentSide } from "./content";
-import { DiffResult, ResolvedSide, listChanges, resolveSpec } from "./diff";
-import { DiffSpec, describeSpec, parseDiffSpec } from "./diffSpec";
-import { repositoryRoot } from "./git";
+import { ResolvedSide } from "../core/diff";
+import { repositoryRoot } from "../core/git";
 import { GitAPI } from "./gitApi";
-import { DELETED, currentSnapshotValue, deleteSnapshotRef, snapshotRef, takeSnapshots, writeSnapshotRef } from "./snapshot";
-import { ReviewStateStore, SessionRecord, reviewScope, reviewStatus } from "./state";
-import { ReviewFile, buildTree, flattenTree, nextUnreviewed } from "./treeModel";
+import { OpenRequest, ReviewSession } from "../core/session";
+import { DELETED } from "../core/snapshot";
+import { ReviewStateStore, SessionRecord } from "../core/state";
+import { ReviewFile, buildTree, flattenTree, nextUnreviewed } from "../core/treeModel";
 
-export type OpenRequest = { input: string } | { branch: true };
+export type { OpenRequest } from "../core/session";
 
 interface Session {
   folder: vscode.WorkspaceFolder;
-  root: string;
-  request: OpenRequest;
-  spec: DiffSpec;
-  title: string;
-  scope: string;
-  ref: string;
-  result?: DiffResult;
-  files: ReviewFile[];
-  error?: string;
+  review: ReviewSession;
+  unsubscribe: () => void;
 }
 
 export interface FileUris {
@@ -36,22 +28,24 @@ export type MultiDiffKind = "all" | "unreviewed" | "since";
 
 const config = () => vscode.workspace.getConfiguration("incrementalDiff");
 
+/**
+ * The VS Code face of a review: the core's ReviewSession (src/core) held in
+ * the extension host, plus what only an editor knows — URIs for its diff
+ * editors, file watchers, settings and context keys.
+ */
 export class ReviewController implements vscode.Disposable {
   private session: Session | undefined;
   private readonly changed = new vscode.EventEmitter<void>();
   readonly onDidChange = this.changed.event;
   private watchers: vscode.Disposable[] = [];
   private refreshTimer: NodeJS.Timeout | undefined;
-  private refreshing: Promise<void> | undefined;
-  private refreshAgain = false;
-  private generation = 0;
 
   constructor(private readonly store: ReviewStateStore, private readonly gitApi: GitAPI | undefined) {}
 
   get active(): boolean { return this.session !== undefined; }
-  get title(): string | undefined { return this.session?.title; }
-  get error(): string | undefined { return this.session?.error; }
-  get files(): ReviewFile[] { return this.session?.files ?? []; }
+  get title(): string | undefined { return this.session?.review.title; }
+  get error(): string | undefined { return this.session?.review.error; }
+  get files(): ReviewFile[] { return this.session?.review.files ?? []; }
 
   /** Files in the order the tree shows them. */
   order(): ReviewFile[] {
@@ -62,24 +56,14 @@ export class ReviewController implements vscode.Disposable {
     if (folder.uri.scheme !== "file") throw new Error("Incremental Diff only supports folders on the local file system.");
     const root = await repositoryRoot(folder.uri.fsPath);
     if (!root) throw new Error(`${folder.name} is not inside a git repository.`);
-    let spec: DiffSpec;
-    let title: string;
-    if ("branch" in request) {
-      const base = await detectBaseBranch(root, config().get<string>("baseBranch", ""));
-      if (!base) throw new Error("Could not find a base branch. Set incrementalDiff.baseBranch.");
-      spec = parseDiffSpec(branchChangesArgs(base));
-      title = `Branch Changes (${base})`;
-    } else {
-      spec = await resolveSpec(root, request.input);
-      title = describeSpec(spec);
-    }
-    // Validate before replacing the current review.
-    const result = await listChanges(root, spec);
-    const scope = reviewScope(folder.uri.toString(), spec.key);
-    this.dispose(false);
-    this.generation++;
-    this.session = { folder, root, request, spec, title, scope, ref: snapshotRef(scope), result, files: [] };
-    this.applyResult(result);
+    // Validated before the current review is replaced.
+    const review = await ReviewSession.open(this.store, root, request, {
+      baseBranch: config().get<string>("baseBranch", ""),
+      baseBranchSetting: "incrementalDiff.baseBranch",
+      folder: folder.uri.toString()
+    });
+    this.closeSession();
+    this.session = { folder, review, unsubscribe: review.onDidChange(() => this.changed.fire()) };
     this.watch();
     const record: SessionRecord = "branch" in request
       ? { folder: folder.uri.toString(), branch: true }
@@ -90,27 +74,24 @@ export class ReviewController implements vscode.Disposable {
   }
 
   async close(): Promise<void> {
-    this.dispose(false);
-    this.session = undefined;
-    this.generation++;
+    this.closeSession();
     await this.store.setSession(undefined);
     await vscode.commands.executeCommand("setContext", "incrementalDiff.active", false);
     this.changed.fire();
   }
 
+  private closeSession(): void {
+    this.dispose(false);
+    if (this.session) {
+      this.session.unsubscribe();
+      this.session.review.close();
+    }
+    this.session = undefined;
+  }
+
   /** Re-runs the diff now (coalescing with a refresh already running). */
   refresh(): Promise<void> {
-    if (this.refreshing) {
-      this.refreshAgain = true;
-      return this.refreshing;
-    }
-    this.refreshing = (async () => {
-      do {
-        this.refreshAgain = false;
-        await this.refreshOnce();
-      } while (this.refreshAgain);
-    })().finally(() => { this.refreshing = undefined; });
-    return this.refreshing;
+    return this.session?.review.refresh() ?? Promise.resolve();
   }
 
   scheduleRefresh(): void {
@@ -119,75 +100,15 @@ export class ReviewController implements vscode.Disposable {
     this.refreshTimer = setTimeout(() => void this.refresh(), Math.max(0, config().get<number>("refreshDelay", 500)));
   }
 
-  private async refreshOnce(): Promise<void> {
-    const session = this.session;
-    if (!session) return;
-    const generation = this.generation;
-    try {
-      const result = await listChanges(session.root, session.spec);
-      if (generation !== this.generation) return;
-      session.error = undefined;
-      this.applyResult(result);
-    } catch (error) {
-      if (generation !== this.generation) return;
-      session.error = error instanceof Error ? error.message : String(error);
-    }
-    this.changed.fire();
-  }
-
-  private applyResult(result: DiffResult): void {
-    const session = this.session!;
-    session.result = result;
-    const marks = this.store.marks(session.scope);
-    session.files = result.files.map(file => {
-      const mark = marks.get(file.path);
-      return { ...file, review: reviewStatus(currentSnapshotValue(file), mark), ...(mark ? { mark } : {}) };
-    });
-  }
-
   /** Marks files reviewed (snapshotting their right side) or not reviewed. */
   async setReviewed(paths: string[], reviewed: boolean): Promise<void> {
-    const session = this.session;
-    if (!session?.result || paths.length === 0) return;
-    const wanted = new Set(paths);
-    const files = session.files.filter(file => wanted.has(file.path));
-    const changes = new Map<string, string | undefined>();
-    if (reviewed) {
-      const snapshots = await takeSnapshots(session.root, session.result.right, files);
-      for (const file of files) {
-        const snapshot = snapshots.get(file.path)!;
-        changes.set(file.path, snapshot);
-        // The snapshot is the file's content right now.
-        if (snapshot === DELETED) delete file.newBlob;
-        else file.newBlob = snapshot;
-      }
-    } else {
-      for (const file of files) changes.set(file.path, undefined);
-    }
-    const marks = await this.store.update(session.scope, changes);
-    if (this.session !== session) return;
-    try {
-      await writeSnapshotRef(session.root, session.ref, [...marks.values()].map(mark => mark.snapshot));
-    } catch (error) {
-      void vscode.window.showWarningMessage(`Incremental Diff could not protect review snapshots from git gc: ${error instanceof Error ? error.message : error}`);
-    }
-    for (const file of session.files) {
-      const mark = marks.get(file.path);
-      file.review = reviewStatus(currentSnapshotValue(file), mark);
-      if (mark) file.mark = mark;
-      else delete file.mark;
-    }
-    this.changed.fire();
+    const warning = await this.session?.review.setReviewed(paths, reviewed);
+    if (warning) void vscode.window.showWarningMessage(`Incremental Diff: ${warning}`);
   }
 
   /** Forgets every reviewed mark of the open review. */
   async clearReviewed(): Promise<void> {
-    const session = this.session;
-    if (!session) return;
-    await this.store.clear(session.scope);
-    await deleteSnapshotRef(session.root, session.ref);
-    if (session.result) this.applyResult(session.result);
-    this.changed.fire();
+    await this.session?.review.clearReviewed();
   }
 
   file(filePath: string): ReviewFile | undefined {
@@ -196,7 +117,7 @@ export class ReviewController implements vscode.Disposable {
 
   /** The review file shown by an editor URI (work tree, git, or snapshot document). */
   fileForUri(uri: vscode.Uri): ReviewFile | undefined {
-    const session = this.session;
+    const session = this.session?.review;
     if (!session) return undefined;
     if (!["file", "git", "incremental-diff"].includes(uri.scheme)) return undefined;
     const relative = path.relative(session.root, uri.fsPath).split(path.sep).join("/");
@@ -204,8 +125,8 @@ export class ReviewController implements vscode.Disposable {
   }
 
   uris(file: ReviewFile): FileUris {
-    const session = this.session!;
-    const result = session.result!;
+    const session = this.session!.review;
+    const result = session.result;
     const abs = (relative: string) => vscode.Uri.file(path.join(session.root, ...relative.split("/")));
     const fileUri = abs(file.path);
     const oldUri = abs(file.oldPath ?? file.path);
@@ -268,7 +189,7 @@ export class ReviewController implements vscode.Disposable {
   }
 
   private watch(): void {
-    const session = this.session!;
+    const session = this.session!.review;
     const rootUri = vscode.Uri.file(session.root);
     const watcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(rootUri, "**/*"));
     const onFile = (uri: vscode.Uri) => {

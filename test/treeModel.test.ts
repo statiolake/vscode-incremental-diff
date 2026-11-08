@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { FolderNode, ReviewFile, TreeNode, buildTree, flattenTree, folderChecked, nextUnreviewed } from "../src/treeModel";
-import { ReviewStatus } from "../src/state";
+import { FolderNode, ReviewFile, TreeNode, buildTree, flattenTree, folderChecked, nextUnreviewed } from "../src/core/treeModel";
+import { ReviewStatus } from "../src/core/state";
 
 const file = (path: string, review: ReviewStatus = "unreviewed"): ReviewFile => ({ status: "M", path, review });
 

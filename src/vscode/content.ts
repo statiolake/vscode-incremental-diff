@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import { git } from "./git";
+import { git } from "../core/git";
 
 /** Read-only documents holding a git blob (snapshots) or nothing (empty sides). */
 export const contentScheme = "incremental-diff";
