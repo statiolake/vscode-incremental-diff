@@ -4,6 +4,8 @@ Incremental Diff lets you review any git diff in VS Code file by file, the way G
 
 It works on any `git diff`: a branch against its base, a range of commits, staged or unstaged changes, or the work tree against any revision. No pull request, remote, or account is needed.
 
+The same core runs in **Neovim** too: see [Neovim](#neovim). How the two share it is in [docs/server.md](docs/server.md).
+
 ## Getting started
 
 1. Install **Incremental Diff** from a VSIX (see [Install](#install)).
@@ -103,12 +105,137 @@ Download `vscode-incremental-diff-<version>.vsix` from the [releases](https://gi
 code --install-extension vscode-incremental-diff-0.1.0.vsix
 ```
 
+## Neovim
+
+The Neovim frontend is a client of the same core. It runs as
+`server/incremental-diff-server.js`, a child of Neovim that speaks JSON-RPC
+over stdio. It needs Neovim 0.10 or later and Node.js 18 or later on `PATH`.
+
+```lua
+-- lazy.nvim
+{
+  'statiolake/vscode-incremental-diff',
+  cmd = { 'IncDiff', 'IncDiffBranch', 'IncDiffHistory' },
+  keys = {
+    { '<Leader>gd', function() require('incremental_diff').open 'HEAD' end, desc = 'Uncommitted changes' },
+    { '<Leader>gb', function() require('incremental_diff').open_branch() end, desc = 'Branch changes' },
+    { '<Leader>gf', function() require('incremental_diff').open_history() end, desc = 'File history' },
+  },
+  main = 'incremental_diff',
+  opts = {},
+}
+```
+
+| Command | |
+| --- | --- |
+| `:IncDiff [args]` | review `git diff <args>`, the same arguments as **Open Diff…** (none: unstaged changes) |
+| `:IncDiffBranch [base]` | **Branch Changes**: everything since the branch left its base |
+| `:IncDiffHistory [file]` | the commits that touched a file, each opened as that commit's change to it |
+| `:IncDiffToggle`, `:IncDiffRefresh`, `:IncDiffClose` | split ⇄ inline, refresh, close |
+
+A review opens in a tab page of its own, with the file panel on the left
+and the diff on the right. Opening the same review again goes to its tab.
+
+**The panel** is a buffer with one line per folder or file: `[x] M name  +3 −1`.
+You can search it with `/` and count with `5j`, as you would any buffer. In
+DevHub's GUI, devhub.nvim draws each line as a row with a checkbox, a status
+letter and counts (`gui.view`). Keys:
+
+| Key | |
+| --- | --- |
+| `<CR>` / `o` | open the file's diff (`o` keeps the cursor in the panel) |
+| `<Space>` | viewed / not viewed; on a folder, every file in it |
+| `<Tab>` / `<S-Tab>` | next / previous file |
+| `i` | split ⇄ inline |
+| `s` | changes since viewed ⇄ all changes |
+| `t` | tree ⇄ flat list |
+| `R` | refresh |
+| `X` | clear every viewed mark (asks first) |
+| `q` | close the review |
+
+**Split** puts two windows side by side in Neovim's own diff mode (`:diffthis`).
+`]c`/`[c`, `do`/`dp`, folds and `diffopt` are Neovim's and yours.
+
+- The work tree's side is the file's own buffer, the one `:edit` opens. You
+  can edit and `:w` it, and its LSP, its plugins and anything else attached
+  to the file keep working.
+- Another side (a commit, the index, the snapshot taken when you viewed the
+  file, or nothing for an added or deleted file) is a read-only scratch
+  buffer, `incdiff://<what>/<path>`. It holds exactly that file's lines,
+  and keeps the path's extension, so it gets the same filetype and colours.
+- The winbar names each side (statuslines stay yours).
+
+**Inline** shows the same file buffer alone in one window, with the diff
+drawn on it as extmarks:
+
+- Added and changed lines are in diff mode's own groups (`DiffAdd`,
+  `DiffChange`, `DiffText` for the changed words), so a change looks the same
+  in both layouts.
+- Deleted lines are virtual lines above what replaced them, old then new, as
+  a unified diff reads. They keep their syntax colours on `DiffDelete`'s
+  ground and take no line numbers: they are not in the buffer. In DevHub
+  they stay in the grid's face (`gui.content_namespace`).
+- The hunks come from `vim.diff()` with your `diffopt` (algorithm,
+  linematch, whitespace), so they are the split view's hunks. `]c`/`[c` move
+  between them.
+- Nothing is inserted into the buffer, so editing and saving work exactly as
+  in split, and the diff follows your edits.
+
+Toggling keeps the file, the line and its place in the window. From the old
+side of a split, the line is mapped to the new side.
+
+**Viewed** works as in VS Code, and the marks are kept in the repository
+(docs/server.md):
+
+- A file changed after you viewed it opens with only those changes, its
+  snapshot against now (`s` or `gS` switches to all changes).
+- Showing all changes, the lines changed since you viewed the file have a bar
+  in the sign column (`IncDiffSinceViewed`).
+
+In the diff windows, while they show a review, these keys work too.
+Everywhere else, and in the same buffer in another tab page, the keys do what
+they did before (your own buffer maps are put back when the review lets go
+of the buffer):
+
+| Key | |
+| --- | --- |
+| `<Tab>` / `<S-Tab>` | next / previous file |
+| `gL` | split ⇄ inline |
+| `gS` | changes since viewed ⇄ all changes |
+| `gV` | mark viewed and open the next file to review |
+| `]c` / `[c` | (inline) next / previous hunk |
+
+```lua
+require('incremental_diff').setup {
+  width = 40,              -- the panel
+  layout = 'split',        -- or 'inline'
+  list_mode = 'tree',      -- or 'flat'
+  since_viewed = true,     -- a file changed since viewed opens with only those changes
+  base_branch = '',        -- for :IncDiffBranch; empty: the branch HEAD forked from
+  node = 'node',
+  keys = { next_file = '<Tab>', prev_file = '<S-Tab>', toggle_layout = 'gL', toggle_since = 'gS',
+           viewed_next = 'gV', next_hunk = ']c', prev_hunk = '[c',
+           close = false, focus_panel = false },   -- e.g. close = 'q'; false: none
+}
+require('incremental_diff').focus_panel()  -- false when this tab page shows no review (for a <C-b> wrapper)
+```
+
+Highlight groups (each links to the group named, unless your colorscheme sets
+it):
+
+- `IncDiffAdd` → `DiffAdd`, `IncDiffChange` → `DiffChange`, `IncDiffText` → `DiffText`
+- `IncDiffDelete` → `DiffDelete`, `IncDiffDeleteText` → `DiffText`
+- `IncDiffSinceViewed` → `DiagnosticWarn`
+- `IncDiffStatusAdded` / `Modified` / `Deleted` → `Added` / `Changed` / `Removed`
+
 ## Development
 
 ```bash
 npm install
-npm test
-npm run build
+npm test               # the core, the server, the extension (and that server/ is up to date)
+npm run build          # the extension
+npm run build:server   # server/incremental-diff-server.js
+test/nvim/run.sh       # the Neovim frontend, headless (NVIM=/path/to/nvim)
 ```
 
 Press F5 in VS Code to launch an Extension Development Host. `npm run package` type-checks, bundles, and creates a VSIX.

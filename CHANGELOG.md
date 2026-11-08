@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.0
+
+- A Neovim frontend (`lua/`, `plugin/`), installable with lazy.nvim:
+  - a file panel, and split (Neovim's own diff mode) and inline views of the same buffers, with viewed marks and changes since viewed;
+  - file history.
+- The logic is a core (`src/core`) shared by the extension and a JSON-RPC server (`server/incremental-diff-server.js`) for other editors.
+- `X^!` on a root commit compares it with nothing instead of failing.
+
 ## 0.1.1
 
 - Branch Changes compares against the branch the current branch forked from (the branch whose merge base with `HEAD` is closest) instead of always the default branch.
