@@ -5,7 +5,10 @@
 - A Neovim frontend (`lua/`, `plugin/`), installable with lazy.nvim:
   - a file panel, and split (Neovim's own diff mode) and inline views of the same buffers, with viewed marks and changes since viewed;
   - file history.
-- The logic is a core (`src/core`) shared by the extension and a JSON-RPC server (`server/incremental-diff-server.js`) for other editors.
+- The logic is one core, `incremental-diff`, a Go binary speaking JSON-RPC on stdio (docs/server.md), shared by both frontends:
+  - the VS Code extension runs it from the VSIX, which carries it for macOS arm64 and Linux x86_64 / arm64;
+  - the Neovim plugin's `build.lua` builds it (needs Go for now); Neovim needs no Node.js.
+- Reviewed marks and the input history are kept in the repository (`.git/incremental-diff/state.json`), shared by VS Code, Neovim and every window on it. Marks VS Code 0.1 kept in its workspace state are not carried over.
 - `X^!` on a root commit compares it with nothing instead of failing.
 
 ## 0.1.1

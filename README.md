@@ -4,7 +4,7 @@ Incremental Diff lets you review any git diff in VS Code file by file, the way G
 
 It works on any `git diff`: a branch against its base, a range of commits, staged or unstaged changes, or the work tree against any revision. No pull request, remote, or account is needed.
 
-The same core runs in **Neovim** too: see [Neovim](#neovim). How the two share it is in [docs/server.md](docs/server.md).
+The same core, one small Go binary, runs under **Neovim** too: see [Neovim](#neovim). How the two share it is in [docs/server.md](docs/server.md).
 
 ## Getting started
 
@@ -59,7 +59,7 @@ A reviewed file whose change disappears from the diff drops out of the list; its
 
 ### Where review state lives
 
-Reviewed marks are stored in VS Code's workspace state, separately for each workspace folder and each diff (equivalent spellings such as `--staged` and `--cached` share one review), and survive reloads.
+Reviewed marks are stored in the repository, in `.git/incremental-diff/state.json` (the common git directory, so worktrees share it), separately for each work tree and each diff (equivalent spellings such as `--staged` and `--cached` share one review). They survive reloads and are shared with Neovim's frontend and other windows on the same repository. Marks made with 0.1 in VS Code's workspace state are not carried over.
 
 Snapshots are ordinary git blobs written with `git hash-object -w`. To keep `git gc` from pruning them, Incremental Diff points a private ref, `refs/incremental-diff/<id>`, at a commit whose tree holds all snapshots of that review. These refs are never pushed by a normal `git push`; **Clear Reviewed Marks** deletes the review's ref. To remove all of them:
 
@@ -71,7 +71,7 @@ git for-each-ref --format='%(refname)' refs/incremental-diff/ | xargs -n1 git up
 
 The review refreshes after files are saved or changed on disk and when the git state changes (commits, checkouts, staging), waiting `incrementalDiff.refreshDelay` milliseconds after the last change. Checkboxes and expanded folders are kept. **Refresh** in the title bar refreshes immediately.
 
-File contents of commits and the index are opened through VS Code's built-in git extension, so the usual editor features work on them. If the git extension is disabled, Incremental Diff reads them from git directly.
+File contents of commits and the index are opened through VS Code's built-in git extension, so the usual editor features work on them. If the git extension is disabled, Incremental Diff reads them through its core.
 
 ## Settings
 
@@ -102,8 +102,10 @@ Useful `when` contexts: `incrementalDiff.active` (a review is open), `incrementa
 Download `vscode-incremental-diff-<version>.vsix` from the [releases](https://github.com/statiolake/vscode-incremental-diff/releases), or build it yourself (see below), then run **Extensions: Install from VSIX…** or:
 
 ```bash
-code --install-extension vscode-incremental-diff-0.1.0.vsix
+code --install-extension vscode-incremental-diff-0.2.0.vsix
 ```
+
+The extension runs its core, `incremental-diff`, from the VSIX: one VSIX carries it for macOS (Apple silicon) and Linux (x86_64, arm64). Nothing else needs to be installed, Node.js and Go included.
 
 ## Neovim
 
@@ -237,13 +239,13 @@ it):
 
 ```bash
 npm install
-npm test               # the extension, the core (go test) and the Neovim frontend
-npm run build          # the extension
+npm test               # the extension, the core (go test) and the Neovim frontend (needs Go 1.24+)
+npm run build          # the core for this machine (bin/<os>-<arch>/) and the extension
 go test ./...          # the core and its server (Go)
-test/nvim/run.sh       # the Neovim frontend, headless, after building the core with build.lua (NVIM=/path/to/nvim)
+test/nvim/run.sh       # the Neovim frontend, headless; builds the core with build.lua first (NVIM=/path/to/nvim)
 ```
 
-Press F5 in VS Code to launch an Extension Development Host. `npm run package` type-checks, bundles, and creates a VSIX.
+Press F5 in VS Code to launch an Extension Development Host. `npm run package` type-checks, builds the core for every shipped platform, bundles, and creates a VSIX.
 
 ## Known limitations
 
