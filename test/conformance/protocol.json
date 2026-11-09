@@ -1,0 +1,284 @@
+{
+  "$comment": [
+    "The server's protocol, as scenarios a runner plays against a server over stdio (docs/server.md).",
+    "Each scenario gets a fresh repository (git init -b main, user Test <test@example.com>) and a fresh server.",
+    "Steps: write {path: content}, remove [paths], git [args], commit message (git add -A, then commit),",
+    "  request method + params, then result or error ({code, message}), and save {name: dotted.path.in.result};",
+    "  raw line (sent as is), then response (the whole message);",
+    "  notification method + params: waits for one, since the last one matched, that matches;",
+    "  stateFile: <git common dir>/incremental-diff/state.json parsed; writeState: that file written.",
+    "In strings: {root}; {rev:REV} = git rev-parse REV; {hash:PATH} = git hash-object --no-filters PATH;",
+    "  {name} = a saved value (a string that is only {name} takes the value's own type).",
+    "Expected objects have exactly these keys, unless \"<...>\": true. Values \"<any>\" (anything present),",
+    "  \"<oid>\" (40 hex digits) and \"<iso>\" (an ISO 8601 time) match by kind; arrays match element by element."
+  ],
+  "scenarios": [
+    {
+      "name": "a review of the work tree: open, mark, change since, history, close",
+      "steps": [
+        { "write": { "a.txt": "a\nb\n", "src/b.txt": "b\n" } },
+        { "commit": "base" },
+        { "write": { "a.txt": "a\nB\nc\n", "new.txt": "1\n2\n" } },
+        { "request": "initialize", "params": {}, "result": { "name": "incremental-diff", "version": "<any>", "protocol": 1 } },
+        {
+          "request": "review/open", "params": { "root": "{root}/src", "input": "HEAD" },
+          "result": {
+            "id": "<any>", "root": "{root}", "title": "git diff HEAD", "key": "HEAD",
+            "left": { "kind": "commit", "sha": "{rev:HEAD}", "label": "HEAD" }, "right": { "kind": "worktree" },
+            "files": [
+              { "path": "a.txt", "status": "M", "oldBlob": "{rev:HEAD:a.txt}", "newBlob": "{hash:a.txt}", "added": 2, "deleted": 1, "review": "unreviewed" },
+              { "path": "new.txt", "status": "A", "untracked": true, "newBlob": "{hash:new.txt}", "added": 2, "deleted": 0, "review": "unreviewed" }
+            ]
+          },
+          "save": { "id": "id" }
+        },
+        {
+          "request": "review/setReviewed", "params": { "id": "{id}", "paths": ["a.txt"], "reviewed": true },
+          "result": {
+            "id": "{id}", "root": "{root}", "title": "git diff HEAD", "key": "HEAD",
+            "left": { "kind": "commit", "sha": "{rev:HEAD}", "label": "HEAD" }, "right": { "kind": "worktree" },
+            "files": [
+              { "path": "a.txt", "status": "M", "oldBlob": "{rev:HEAD:a.txt}", "newBlob": "{hash:a.txt}", "added": 2, "deleted": 1, "review": "reviewed", "snapshot": "{hash:a.txt}", "reviewedAt": "<iso>" },
+              { "path": "new.txt", "status": "A", "untracked": true, "newBlob": "{hash:new.txt}", "added": 2, "deleted": 0, "review": "unreviewed" }
+            ]
+          },
+          "save": { "snap": "files.0.snapshot" }
+        },
+        {
+          "notification": "review/changed",
+          "params": { "<...>": true, "id": "{id}", "files": [{ "<...>": true, "path": "a.txt", "review": "reviewed", "snapshot": "{snap}" }, { "<...>": true, "path": "new.txt", "review": "unreviewed" }] }
+        },
+        { "request": "git/blob", "params": { "root": "{root}", "blob": "{snap}" }, "result": { "text": "a\nB\nc\n" } },
+        {
+          "stateFile": {
+            "incrementalDiff.history": ["HEAD"],
+            "incrementalDiff.review:{root}\nHEAD": { "version": 1, "marks": { "a.txt": { "snapshot": "{snap}", "reviewedAt": "<iso>" } } }
+          }
+        },
+        { "write": { "a.txt": "a\nB\nc\nd\n" } },
+        {
+          "request": "review/refresh", "params": { "id": "{id}" },
+          "result": {
+            "<...>": true,
+            "files": [
+              { "path": "a.txt", "status": "M", "oldBlob": "{rev:HEAD:a.txt}", "newBlob": "{hash:a.txt}", "added": 3, "deleted": 1, "review": "changed", "snapshot": "{snap}", "reviewedAt": "<iso>" },
+              { "<...>": true, "path": "new.txt", "review": "unreviewed" }
+            ]
+          }
+        },
+        {
+          "request": "review/open", "params": { "root": "{root}", "input": "  --staged " },
+          "result": {
+            "id": "<any>", "root": "{root}", "title": "Staged Changes", "key": "--cached",
+            "left": { "kind": "commit", "sha": "{rev:HEAD}", "label": "HEAD" }, "right": { "kind": "index" }, "files": []
+          },
+          "save": { "staged": "id" }
+        },
+        { "request": "history/list", "params": { "root": "{root}" }, "result": ["  --staged ", "HEAD"] },
+        { "request": "history/remove", "params": { "root": "{root}/src", "input": "  --staged " }, "result": ["HEAD"] },
+        { "request": "review/close", "params": { "id": "{staged}" }, "result": null },
+        { "request": "review/get", "params": { "id": "{staged}" }, "error": { "code": -32602, "message": "No open review with id {staged}." } },
+        { "request": "review/get", "params": { "id": "{id}" }, "result": { "<...>": true, "id": "{id}", "key": "HEAD" } },
+        {
+          "request": "review/setReviewed", "params": { "id": "{id}", "paths": ["a.txt", "new.txt"] },
+          "result": { "<...>": true, "files": [{ "<...>": true, "path": "a.txt", "review": "reviewed" }, { "<...>": true, "path": "new.txt", "review": "reviewed", "snapshot": "{hash:new.txt}" }] }
+        },
+        {
+          "request": "review/setReviewed", "params": { "id": "{id}", "paths": ["new.txt"], "reviewed": false },
+          "result": { "<...>": true, "files": [{ "<...>": true, "path": "a.txt", "review": "reviewed" }, { "path": "new.txt", "status": "A", "untracked": true, "newBlob": "{hash:new.txt}", "added": 2, "deleted": 0, "review": "unreviewed" }] }
+        },
+        {
+          "request": "review/clearReviewed", "params": { "id": "{id}" },
+          "result": {
+            "<...>": true,
+            "files": [
+              { "path": "a.txt", "status": "M", "oldBlob": "{rev:HEAD:a.txt}", "newBlob": "{hash:a.txt}", "added": 3, "deleted": 1, "review": "unreviewed" },
+              { "<...>": true, "path": "new.txt", "review": "unreviewed" }
+            ]
+          }
+        },
+        { "stateFile": { "incrementalDiff.history": ["HEAD"] } },
+        { "request": "review/close", "params": { "id": "{id}" }, "result": null }
+      ]
+    },
+    {
+      "name": "marks stored before are found, and keys the server does not know are kept",
+      "steps": [
+        { "write": { "a.txt": "a\n", "b.txt": "b\n" } },
+        { "commit": "base" },
+        { "write": { "a.txt": "a2\n", "b.txt": "b2\n" } },
+        {
+          "writeState": {
+            "incrementalDiff.review:{root}\nHEAD": {
+              "version": 1,
+              "marks": {
+                "a.txt": { "snapshot": "{hash:a.txt}", "reviewedAt": "2026-01-02T03:04:05.000Z" },
+                "b.txt": { "snapshot": "{rev:HEAD:b.txt}", "reviewedAt": "2026-01-02T03:04:05.000Z" },
+                "bad.txt": { "snapshot": 3 }
+              }
+            },
+            "incrementalDiff.history": ["HEAD~", 5],
+            "someone.else": { "keep": true }
+          }
+        },
+        {
+          "request": "review/open", "params": { "root": "{root}", "input": "HEAD" },
+          "result": {
+            "<...>": true,
+            "files": [
+              { "path": "a.txt", "status": "M", "oldBlob": "{rev:HEAD:a.txt}", "newBlob": "{hash:a.txt}", "added": 1, "deleted": 1, "review": "reviewed", "snapshot": "{hash:a.txt}", "reviewedAt": "2026-01-02T03:04:05.000Z" },
+              { "path": "b.txt", "status": "M", "oldBlob": "{rev:HEAD:b.txt}", "newBlob": "{hash:b.txt}", "added": 1, "deleted": 1, "review": "changed", "snapshot": "{rev:HEAD:b.txt}", "reviewedAt": "2026-01-02T03:04:05.000Z" }
+            ]
+          }
+        },
+        {
+          "stateFile": {
+            "incrementalDiff.review:{root}\nHEAD": {
+              "version": 1,
+              "marks": {
+                "a.txt": { "snapshot": "{hash:a.txt}", "reviewedAt": "2026-01-02T03:04:05.000Z" },
+                "b.txt": { "snapshot": "{rev:HEAD:b.txt}", "reviewedAt": "2026-01-02T03:04:05.000Z" },
+                "bad.txt": { "snapshot": 3 }
+              }
+            },
+            "incrementalDiff.history": ["HEAD", "HEAD~"],
+            "someone.else": { "keep": true }
+          }
+        }
+      ]
+    },
+    {
+      "name": "commits, ranges, renames, deletions, binaries, branch changes and history",
+      "steps": [
+        { "write": { "keep.txt": "keep\n", "old/name.ts": "export const value = 1;\nexport const other = 2;\nexport const third = 3;\n", "gone.md": "bye\n", "img.bin": "\u0000\u0001" } },
+        { "commit": "base" },
+        { "git": ["switch", "-q", "-c", "feature"] },
+        { "remove": ["old/name.ts", "gone.md"] },
+        { "write": { "new/name.ts": "export const value = 1;\nexport const other = 2;\nexport const third = 3;\n", "img.bin": "\u0000\u0002", "added.ts": "added\n" } },
+        { "commit": "feature" },
+        {
+          "request": "review/open", "params": { "root": "{root}", "input": "git diff main..feature" },
+          "result": {
+            "id": "<any>", "root": "{root}", "title": "git diff main..feature", "key": "main..feature",
+            "left": { "kind": "commit", "sha": "{rev:main}", "label": "main" }, "right": { "kind": "commit", "sha": "{rev:feature}", "label": "feature" },
+            "files": [
+              { "path": "added.ts", "status": "A", "newBlob": "{rev:feature:added.ts}", "added": 1, "deleted": 0, "review": "unreviewed" },
+              { "path": "gone.md", "status": "D", "oldBlob": "{rev:main:gone.md}", "added": 0, "deleted": 1, "review": "unreviewed" },
+              { "path": "img.bin", "status": "M", "oldBlob": "{rev:main:img.bin}", "newBlob": "{rev:feature:img.bin}", "binary": true, "review": "unreviewed" },
+              { "path": "new/name.ts", "oldPath": "old/name.ts", "status": "R", "oldBlob": "{rev:main:old/name.ts}", "newBlob": "{rev:feature:new/name.ts}", "added": 0, "deleted": 0, "review": "unreviewed" }
+            ]
+          },
+          "save": { "id": "id" }
+        },
+        {
+          "request": "review/setReviewed", "params": { "id": "{id}", "paths": ["gone.md", "added.ts"], "reviewed": true },
+          "result": {
+            "<...>": true,
+            "files": [
+              { "<...>": true, "path": "added.ts", "review": "reviewed", "snapshot": "{rev:feature:added.ts}" },
+              { "path": "gone.md", "status": "D", "oldBlob": "{rev:main:gone.md}", "added": 0, "deleted": 1, "review": "reviewed", "snapshot": "deleted", "reviewedAt": "<iso>" },
+              { "<...>": true, "path": "img.bin", "review": "unreviewed" },
+              { "<...>": true, "path": "new/name.ts", "review": "unreviewed" }
+            ]
+          }
+        },
+        {
+          "request": "review/open", "params": { "root": "{root}", "input": "feature^!", "stats": false },
+          "result": {
+            "<...>": true, "key": "feature^!",
+            "left": { "kind": "commit", "sha": "{rev:main}", "label": "feature^" }, "right": { "kind": "commit", "sha": "{rev:feature}", "label": "feature" },
+            "files": [
+              { "path": "added.ts", "status": "A", "newBlob": "{rev:feature:added.ts}", "review": "unreviewed" },
+              { "path": "gone.md", "status": "D", "oldBlob": "{rev:main:gone.md}", "review": "unreviewed" },
+              { "path": "img.bin", "status": "M", "oldBlob": "{rev:main:img.bin}", "newBlob": "{rev:feature:img.bin}", "review": "unreviewed" },
+              { "path": "new/name.ts", "oldPath": "old/name.ts", "status": "R", "oldBlob": "{rev:main:old/name.ts}", "newBlob": "{rev:feature:new/name.ts}", "review": "unreviewed" }
+            ]
+          }
+        },
+        {
+          "request": "review/open", "params": { "root": "{root}", "input": "{rev:main}^!" },
+          "result": {
+            "<...>": true, "title": "git diff {rev:main}^!",
+            "left": { "kind": "commit", "sha": "4b825dc642cb6eb9a060e54bf8d69288fbee4904", "label": "{rev:main}^ (none)" },
+            "files": [{ "<...>": true, "path": "gone.md", "status": "A" }, { "<...>": true, "path": "img.bin", "status": "A", "binary": true }, { "<...>": true, "path": "keep.txt" }, { "<...>": true, "path": "old/name.ts" }]
+          }
+        },
+        {
+          "request": "review/open", "params": { "root": "{root}", "input": "main...feature -- new" },
+          "result": {
+            "<...>": true, "key": "main...feature -- new",
+            "left": { "kind": "commit", "sha": "{rev:main}", "label": "merge-base(main, feature)" },
+            "files": [{ "<...>": true, "path": "new/name.ts", "status": "A" }]
+          }
+        },
+        { "write": { "wip.txt": "wip\n" } },
+        {
+          "request": "review/open", "params": { "root": "{root}", "branch": true, "baseBranch": " main " },
+          "result": {
+            "<...>": true, "title": "Branch Changes (main)", "key": "--merge-base main",
+            "left": { "kind": "commit", "sha": "{rev:main}", "label": "merge-base(main, HEAD)" }, "right": { "kind": "worktree" },
+            "files": [
+              { "<...>": true, "path": "added.ts" }, { "<...>": true, "path": "gone.md" }, { "<...>": true, "path": "img.bin" }, { "<...>": true, "path": "new/name.ts" },
+              { "path": "wip.txt", "status": "A", "untracked": true, "newBlob": "{hash:wip.txt}", "added": 1, "deleted": 0, "review": "unreviewed" }
+            ]
+          }
+        },
+        { "git": ["switch", "-q", "-c", "topic"] },
+        { "commit": "topic" },
+        { "request": "review/open", "params": { "root": "{root}", "branch": true }, "result": { "<...>": true, "title": "Branch Changes (feature)", "key": "--merge-base feature" } },
+        { "request": "history/list", "params": { "root": "{root}" }, "result": ["main...feature -- new", "{rev:main}^!", "feature^!", "git diff main..feature"] },
+        {
+          "request": "git/log", "params": { "root": "{root}", "path": "new/name.ts" },
+          "result": [
+            { "sha": "{rev:feature}", "short": "<any>", "author": "Test", "date": "<iso>", "subject": "feature", "path": "new/name.ts" },
+            { "sha": "{rev:main}", "short": "<any>", "author": "Test", "date": "<iso>", "subject": "base", "path": "old/name.ts" }
+          ]
+        },
+        { "request": "git/log", "params": { "root": "{root}", "path": "added.ts", "limit": 1 }, "result": [{ "<...>": true, "sha": "{rev:feature}" }] },
+        { "request": "git/log", "params": { "root": "{root}", "path": "nothing-here" }, "result": [] },
+        { "request": "git/blob", "params": { "root": "{root}", "blob": "{rev:feature:img.bin}" }, "result": { "binary": true } }
+      ]
+    },
+    {
+      "name": "errors",
+      "steps": [
+        { "write": { "a.txt": "a\n" } },
+        { "commit": "base" },
+        { "request": "nope", "params": {}, "error": { "code": -32602, "message": "Unknown method: nope" } },
+        { "request": "review/open", "params": { "root": "relative/path" }, "error": { "code": -32602, "message": "root must be an absolute path." } },
+        { "request": "review/open", "params": {}, "error": { "code": -32602, "message": "root must be an absolute path." } },
+        { "request": "review/open", "params": { "root": "/nonexistent-incremental-diff" }, "error": { "code": -32602, "message": "/nonexistent-incremental-diff is not inside a git work tree." } },
+        { "request": "review/open", "params": { "root": "{root}", "input": "no-such-rev --" }, "error": { "code": -32000, "message": "Unknown revision: no-such-rev" } },
+        { "request": "review/open", "params": { "root": "{root}", "input": "no-such-rev..HEAD" }, "error": { "code": -32000, "message": "Unknown revision: no-such-rev" } },
+        { "request": "review/open", "params": { "root": "{root}", "input": "--stat" }, "error": { "code": -32000, "message": "--stat changes git diff's output format and is not supported." } },
+        { "request": "review/open", "params": { "root": "{root}", "input": "\"open" }, "error": { "code": -32000, "message": "Unterminated \" quote." } },
+        { "request": "review/open", "params": { "root": "{root}", "input": "--cached HEAD~..HEAD" }, "error": { "code": -32000, "message": "--cached cannot be combined with a revision range." } },
+        { "request": "review/open", "params": { "root": "{root}", "input": "HEAD HEAD HEAD" }, "error": { "code": -32000, "message": "Combined diffs of more than two revisions are not supported." } },
+        { "request": "review/open", "params": { "root": "{root}", "branch": true }, "error": { "code": -32000, "message": "Could not find a base branch. Set the base branch." } },
+        { "request": "history/list", "params": { "root": "{root}" }, "result": [] },
+        { "request": "git/blob", "params": { "root": "{root}", "blob": "../x" }, "error": { "code": -32602, "message": "blob must be an object id." } },
+        { "request": "git/log", "params": { "root": "{root}", "path": "" }, "error": { "code": -32602, "message": "path must be a path relative to the root." } },
+        { "request": "review/get", "params": { "id": 99 }, "error": { "code": -32602, "message": "No open review with id 99." } },
+        { "request": "review/refresh", "params": {}, "error": { "code": -32602, "message": "No open review with id undefined." } },
+        { "request": "review/open", "params": { "root": "{root}" }, "result": { "<...>": true, "title": "Unstaged Changes", "key": "", "left": { "kind": "index" }, "right": { "kind": "worktree" }, "files": [] }, "save": { "id": "id" } },
+        { "request": "review/setReviewed", "params": { "id": "{id}", "paths": "a.txt" }, "error": { "code": -32602, "message": "paths must be a list of paths." } },
+        { "request": "review/setReviewed", "params": { "id": "{id}", "paths": [1] }, "error": { "code": -32602, "message": "paths must be a list of paths." } },
+        { "request": "review/close", "params": { "id": 12345 }, "result": null },
+        { "raw": "this is not json", "response": { "jsonrpc": "2.0", "id": null, "error": { "code": -32700, "message": "Parse error" } } },
+        { "raw": "{\"jsonrpc\":\"2.0\",\"id\":\"x\"}", "response": { "jsonrpc": "2.0", "id": "x", "error": { "code": -32600, "message": "Invalid request" } } },
+        { "raw": "{\"jsonrpc\":\"2.0\",\"id\":\"y\",\"method\":\"initialize\"}", "response": { "jsonrpc": "2.0", "id": "y", "result": { "name": "incremental-diff", "version": "<any>", "protocol": 1 } } }
+      ]
+    },
+    {
+      "name": "git's own state changing refreshes a review by itself",
+      "steps": [
+        { "write": { "a.txt": "a\n" } },
+        { "commit": "base" },
+        { "write": { "a.txt": "a2\n" } },
+        { "request": "review/open", "params": { "root": "{root}", "input": "--cached" }, "result": { "<...>": true, "key": "--cached", "files": [] } },
+        { "git": ["add", "a.txt"] },
+        { "notification": "review/changed", "params": { "<...>": true, "key": "--cached", "files": [{ "<...>": true, "path": "a.txt", "status": "M", "newBlob": "{rev::a.txt}" }] } }
+      ]
+    }
+  ]
+}
