@@ -4,6 +4,8 @@
 
 # --- Runtime artifacts (must ship) ---
 !dist/extension.js
+!bin/**/incremental-diff
+!bin/**/incremental-diff.exe
 !media/**
 
 # --- Marketplace metadata (must ship) ---

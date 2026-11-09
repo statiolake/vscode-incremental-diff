@@ -2,20 +2,37 @@ import "./installVscodeMock";
 import assert from "node:assert/strict";
 import { after, test } from "node:test";
 import type * as vscode from "vscode";
-import { ReviewController } from "../src/vscode/review";
-import { git } from "../src/core/git";
-import { Memento, ReviewStateStore } from "../src/core/state";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
+import { CoreConnection } from "../src/vscode/core";
+import { ReviewController, readSessionRecord } from "../src/vscode/review";
 import { TempRepo } from "./helpers";
 import { Uri, executed } from "./vscodeMock";
 
-class MemoryMemento implements Memento {
+class MemoryMemento {
   readonly data = new Map<string, unknown>();
+  keys(): readonly string[] { return [...this.data.keys()]; }
   get<T>(key: string): T | undefined { return this.data.get(key) as T | undefined; }
-  async update(key: string, value: unknown): Promise<void> { this.data.set(key, value); }
+  async update(key: string, value: unknown): Promise<void> {
+    if (value === undefined) this.data.delete(key);
+    else this.data.set(key, value);
+  }
 }
 
+// The core as the extension ships it (npm run build:core).
+const executable = join(__dirname, "..", "..", "bin",
+  `${process.platform === "win32" ? "windows" : process.platform}-${process.arch === "x64" ? "amd64" : process.arch}`,
+  process.platform === "win32" ? "incremental-diff.exe" : "incremental-diff");
+assert.ok(existsSync(executable), `${executable} is missing: run npm run build:core`);
+const core = new CoreConnection(executable);
+const git = (...args: string[]) => repo.git(...args);
+
 const repo = new TempRepo();
-after(() => repo.dispose());
+after(() => {
+  core.dispose();
+  repo.dispose();
+});
+const memento = () => new MemoryMemento() as unknown as vscode.Memento;
 const folder = { uri: Uri.file(repo.root), name: "repo", index: 0 } as unknown as vscode.WorkspaceFolder;
 const statuses = (controller: ReviewController) => controller.files.map(file => `${file.path}:${file.review}`);
 const lastCommand = () => executed[executed.length - 1];
@@ -30,15 +47,16 @@ test("reviews files incrementally against the work tree", async () => {
   repo.remove("gone.txt");
   repo.write("new.txt", "new\n");
 
-  const memento = new MemoryMemento();
-  const controller = new ReviewController(new ReviewStateStore(memento), undefined);
+  const state = memento();
+  const controller = new ReviewController(core, state, undefined);
   await controller.open(folder, { input: "HEAD" });
+  assert.deepEqual(readSessionRecord(state), { folder: folder.uri.toString(), input: "HEAD" });
   assert.equal(controller.title, "git diff HEAD");
   assert.deepEqual(statuses(controller), ["a.txt:unreviewed", "gone.txt:unreviewed", "new.txt:unreviewed", "src/b.txt:unreviewed"]);
 
   await controller.setReviewed(["a.txt", "gone.txt", "src/b.txt"], true);
   assert.deepEqual(statuses(controller), ["a.txt:reviewed", "gone.txt:reviewed", "new.txt:unreviewed", "src/b.txt:reviewed"]);
-  const refs = await git(repo.root, ["for-each-ref", "--format=%(refname)", "refs/incremental-diff/"]);
+  const refs = git("for-each-ref", "--format=%(refname)", "refs/incremental-diff/");
   assert.equal(refs.trim().split("\n").length, 1);
 
   // Edit a reviewed file: it is unchecked and shows snapshot -> current.
@@ -50,7 +68,7 @@ test("reviews files incrementally against the work tree", async () => {
   const [snapshot, current, title] = lastCommand().args as [Uri, Uri, string];
   assert.equal(lastCommand().command, "vscode.diff");
   assert.equal(snapshot.scheme, "incremental-diff");
-  assert.equal(await git(repo.root, ["cat-file", "blob", JSON.parse(snapshot.query).blob]), "a1\n");
+  assert.equal(git("cat-file", "blob", JSON.parse(snapshot.query).blob), "a1\n");
   assert.equal(current.scheme, "file");
   assert.equal(title, "a.txt (Since Review)");
   await controller.openFile(changed, "full");
@@ -75,10 +93,14 @@ test("reviews files incrementally against the work tree", async () => {
   assert.equal(controller.fileForUri(snapshot as unknown as vscode.Uri)?.path, "a.txt");
   assert.equal(controller.fileForUri(Uri.file(`${repo.root}/src/b.txt`) as unknown as vscode.Uri)?.path, "src/b.txt");
 
-  // Review state survives a reload; a reverted change disappears from the list.
+  // Review state survives a reload (in the repository, shared with every
+  // frontend); a reverted change disappears from the list.
   repo.git("checkout", "--", "src/b.txt");
-  const reloaded = new ReviewController(new ReviewStateStore(memento), undefined);
+  const reloadedState = memento();
+  const secondCore = new CoreConnection(executable);
+  const reloaded = new ReviewController(secondCore, reloadedState, undefined);
   await reloaded.open(folder, { input: "  HEAD " });
+  assert.deepEqual(await reloaded.history(folder), ["  HEAD ", "HEAD"]);
   assert.deepEqual(statuses(reloaded), ["a.txt:changed", "gone.txt:reviewed", "new.txt:unreviewed"]);
 
   await reloaded.setReviewed(["a.txt"], true);
@@ -88,15 +110,17 @@ test("reviews files incrementally against the work tree", async () => {
 
   await reloaded.clearReviewed();
   assert.ok(reloaded.files.every(file => file.review === "unreviewed"));
-  assert.equal((await git(repo.root, ["for-each-ref", "refs/incremental-diff/"])).trim(), "");
+  assert.equal(git("for-each-ref", "refs/incremental-diff/").trim(), "");
   await reloaded.close();
   assert.equal(reloaded.active, false);
+  assert.equal(readSessionRecord(reloadedState), undefined, "a closed review is not reopened");
   controller.dispose();
   reloaded.dispose();
+  secondCore.dispose();
 });
 
 test("rejects folders outside git and bad revisions without closing the open review", async () => {
-  const controller = new ReviewController(new ReviewStateStore(new MemoryMemento()), undefined);
+  const controller = new ReviewController(core, memento(), undefined);
   await controller.open(folder, { input: "" });
   await assert.rejects(controller.open(folder, { input: "no-such-rev --" }), /Unknown revision/);
   assert.equal(controller.title, "Unstaged Changes");

@@ -1,9 +1,8 @@
 import * as path from "node:path";
 import * as vscode from "vscode";
-import { FileStatus } from "../core/diff";
+import { FileStatus, ReviewStatus } from "./protocol";
 import { ReviewController } from "./review";
-import { ReviewStatus } from "../core/state";
-import { FolderNode, ReviewFile, TreeNode, ViewMode, buildTree, folderChecked } from "../core/treeModel";
+import { FolderNode, ReviewFile, TreeNode, ViewMode, buildTree, folderChecked } from "./treeModel";
 
 /** Scheme of tree item resource URIs; they only carry decorations and icons. */
 export const itemScheme = "incremental-diff-item";
@@ -108,7 +107,7 @@ export class FilesTreeProvider implements vscode.TreeDataProvider<TreeNode>, vsc
     tooltip.appendText(file.path);
     if (file.oldPath) tooltip.appendText(`\nRenamed from ${file.oldPath}`);
     tooltip.appendText(`\n${file.untracked ? "Untracked" : statusNames[file.status]}`);
-    if (file.mark) tooltip.appendText(`\n${file.review === "changed" ? "Changed since review on" : "Reviewed on"} ${new Date(file.mark.reviewedAt).toLocaleString()}`);
+    if (file.reviewedAt) tooltip.appendText(`\n${file.review === "changed" ? "Changed since review on" : "Reviewed on"} ${new Date(file.reviewedAt).toLocaleString()}`);
     item.tooltip = tooltip;
     item.contextValue = file.review === "changed" ? "file:changed" : "file";
     item.command = { command: "incrementalDiff.openFileDiff", title: "Open Diff", arguments: [file.path] };

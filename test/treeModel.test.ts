@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { FolderNode, ReviewFile, TreeNode, buildTree, flattenTree, folderChecked, nextUnreviewed } from "../src/core/treeModel";
-import { ReviewStatus } from "../src/core/state";
+import { ReviewStatus } from "../src/vscode/protocol";
+import { FolderNode, ReviewFile, TreeNode, buildTree, flattenTree, folderChecked, nextUnreviewed } from "../src/vscode/treeModel";
 
 const file = (path: string, review: ReviewStatus = "unreviewed"): ReviewFile => ({ status: "M", path, review });
 

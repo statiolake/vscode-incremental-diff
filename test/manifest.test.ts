@@ -42,3 +42,14 @@ test("leaves keybindings to the user", () => {
 test("documents every setting in the README", () => {
   for (const key of Object.keys(manifest.contributes.configuration.properties)) assert.ok(readme.includes(`\`${key}\``), key);
 });
+
+test("the core reports the extension's version", () => {
+  const main = readFileSync("cmd/incremental-diff/main.go", "utf8");
+  assert.match(main, new RegExp(`var version = "${(manifest as unknown as { version: string }).version.replace(/\./g, "\\.")}"`));
+});
+
+test("the VSIX ships the core and nothing of the Go source", () => {
+  const ignore = readFileSync(".vscodeignore", "utf8");
+  assert.ok(ignore.includes("!bin/**/incremental-diff\n"));
+  assert.ok(!/^!(cmd|internal|go\.mod)/m.test(ignore));
+});

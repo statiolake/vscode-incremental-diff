@@ -1,18 +1,26 @@
 import * as vscode from "vscode";
 import { BlobContentProvider, contentScheme } from "./content";
 import { getGitApi } from "./gitApi";
-import { ReviewController, OpenRequest, MultiDiffKind } from "./review";
-import { ReviewStateStore } from "../core/state";
+import { CoreConnection } from "./core";
+import { ReviewController, OpenRequest, MultiDiffKind, readSessionRecord } from "./review";
 import { FileDecorations, FilesTreeProvider, checkboxChanges } from "./tree";
-import { ReviewFile, TreeNode } from "../core/treeModel";
+import { ReviewFile, TreeNode } from "./treeModel";
 
 export interface IncrementalDiffApi {
   readonly controller: ReviewController;
 }
 
+/**
+ * The review is the core's: incremental-diff (cmd/incremental-diff, shipped
+ * in bin/<os>-<arch>/), a child process speaking JSON-RPC (core.ts). It
+ * keeps the marks in the repository, so Neovim's frontend sees them too.
+ */
 export async function activate(context: vscode.ExtensionContext): Promise<IncrementalDiffApi> {
-  const store = new ReviewStateStore(context.workspaceState);
-  const controller = new ReviewController(store, await getGitApi());
+  const platform = process.platform === "win32" ? "windows" : process.platform;
+  const arch = process.arch === "x64" ? "amd64" : process.arch;
+  const name = process.platform === "win32" ? "incremental-diff.exe" : "incremental-diff";
+  const core = new CoreConnection(context.asAbsolutePath(`bin/${platform}-${arch}/${name}`));
+  const controller = new ReviewController(core, context.workspaceState, await getGitApi());
   const tree = new FilesTreeProvider(controller);
   const view = vscode.window.createTreeView("incrementalDiff.files", {
     treeDataProvider: tree,
@@ -75,11 +83,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<Increm
     if (!controller.active) throw new Error("No review is open. Run Incremental Diff: Open Diff… or Open Branch Changes first.");
   };
 
-  const open = async (request: OpenRequest) => {
-    const folder = await pickFolder();
+  const open = async (request: OpenRequest, folder?: vscode.WorkspaceFolder) => {
+    folder ??= await pickFolder();
     if (!folder) return;
-    await vscode.window.withProgress({ location: { viewId: "incrementalDiff.files" } }, () => controller.open(folder, request));
-    if ("input" in request) await store.addHistory(request.input);
+    const chosen = folder;
+    await vscode.window.withProgress({ location: { viewId: "incrementalDiff.files" } }, () => controller.open(chosen, request));
     await vscode.commands.executeCommand("incrementalDiff.files.focus");
   };
 
@@ -93,9 +101,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<Increm
 
   context.subscriptions.push(
     controller,
+    core,
     tree,
     view,
-    vscode.workspace.registerTextDocumentContentProvider(contentScheme, new BlobContentProvider()),
+    vscode.workspace.registerTextDocumentContentProvider(contentScheme, new BlobContentProvider(core)),
     vscode.window.registerFileDecorationProvider(new FileDecorations()),
     controller.onDidChange(updateView),
     vscode.window.onDidChangeActiveTextEditor(() => void updateEditorContext()),
@@ -120,8 +129,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<Increm
     }),
 
     run("incrementalDiff.openDiff", async (input?: unknown) => {
-      const value = typeof input === "string" ? input : await promptDiffArgs(store);
-      if (value !== undefined) await open({ input: value });
+      const folder = await pickFolder();
+      if (!folder) return;
+      const value = typeof input === "string" ? input : await promptDiffArgs(controller, folder);
+      if (value !== undefined) await open({ input: value }, folder);
     }),
     run("incrementalDiff.openBranchChanges", () => open({ branch: true })),
     run("incrementalDiff.openAllChanges", () => openMulti("all")),
@@ -187,7 +198,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<Increm
   updateView();
 
   // Reopen the review that was open before the window reloaded.
-  const previous = store.session();
+  const previous = readSessionRecord(context.workspaceState);
   const folder = previous && vscode.workspace.workspaceFolders?.find(item => item.uri.toString() === previous.folder);
   if (previous && folder) {
     controller.open(folder, previous.branch ? { branch: true } : { input: previous.input ?? "" })
@@ -223,8 +234,9 @@ interface ArgsItem extends vscode.QuickPickItem {
 
 const removeButton: vscode.QuickInputButton = { iconPath: new vscode.ThemeIcon("close"), tooltip: "Remove from History" };
 
-/** Asks for `git diff` arguments, offering recent inputs. */
-function promptDiffArgs(store: ReviewStateStore): Promise<string | undefined> {
+/** Asks for `git diff` arguments, offering the inputs opened before in folder's repository. */
+async function promptDiffArgs(controller: ReviewController, folder: vscode.WorkspaceFolder): Promise<string | undefined> {
+  let recent = await controller.history(folder).catch(() => [] as string[]);
   return new Promise(resolve => {
     const pick = vscode.window.createQuickPick<ArgsItem>();
     pick.title = "Incremental Diff: Open Diff";
@@ -233,7 +245,7 @@ function promptDiffArgs(store: ReviewStateStore): Promise<string | undefined> {
     const describe = (value: string) => value === "" ? "Unstaged changes (git diff)" : `git diff ${value}`;
     const update = () => {
       const typed = pick.value.trim();
-      const history = store.history().filter(item => item !== typed);
+      const history = recent.filter(item => item !== typed);
       pick.items = [
         { label: typed === "" ? "$(diff) (no arguments)" : `$(diff) ${typed}`, description: describe(typed), value: typed, alwaysShow: true },
         ...(history.length ? [{ label: "Recent", kind: vscode.QuickPickItemKind.Separator, value: "" } as ArgsItem] : []),
@@ -243,7 +255,7 @@ function promptDiffArgs(store: ReviewStateStore): Promise<string | undefined> {
     let accepted: string | undefined;
     pick.onDidChangeValue(update);
     pick.onDidTriggerItemButton(async event => {
-      await store.removeHistory(event.item.value);
+      recent = await controller.removeHistory(folder, event.item.value).catch(() => recent.filter(item => item !== event.item.value));
       update();
     });
     pick.onDidAccept(() => {

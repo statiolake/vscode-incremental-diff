@@ -1,10 +1,9 @@
-import { ChangedFile } from "./diff";
-import { ReviewMark, ReviewStatus } from "./state";
+// The files of a review as the Changed Files view shows them: a folder
+// tree or a flat list, and the order "next file" walks.
+import { WireFile } from "./protocol";
 
-export interface ReviewFile extends ChangedFile {
-  review: ReviewStatus;
-  mark?: ReviewMark;
-}
+/** A file of the review, as the core answers it. */
+export type ReviewFile = WireFile;
 
 export interface FolderNode {
   kind: "folder";

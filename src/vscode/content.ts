@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import { git } from "../core/git";
+import { CoreConnection } from "./core";
 
 /** Read-only documents holding a git blob (snapshots) or nothing (empty sides). */
 export const contentScheme = "incremental-diff";
@@ -29,9 +29,12 @@ export function contentSide(uri: vscode.Uri): ContentSide | undefined {
 }
 
 export class BlobContentProvider implements vscode.TextDocumentContentProvider {
+  constructor(private readonly core: CoreConnection) {}
+
   async provideTextDocumentContent(uri: vscode.Uri): Promise<string> {
     const query = JSON.parse(uri.query) as ContentQuery;
     if (!query.blob) return "";
-    return git(query.root, ["cat-file", "blob", query.blob]);
+    const blob = await this.core.request("git/blob", { root: query.root, blob: query.blob });
+    return blob.text ?? "";
   }
 }

@@ -4,5 +4,13 @@
     "outDir": "dist-test",
     "rootDir": "."
   },
-  "include": ["src/core/**/*.ts", "src/server/**/*.ts", "src/vscode/review.ts", "src/vscode/content.ts", "src/vscode/gitApi.ts", "test/**/*.ts"]
+  "include": [
+    "src/vscode/review.ts",
+    "src/vscode/content.ts",
+    "src/vscode/core.ts",
+    "src/vscode/gitApi.ts",
+    "src/vscode/protocol.ts",
+    "src/vscode/treeModel.ts",
+    "test/**/*.ts"
+  ]
 }

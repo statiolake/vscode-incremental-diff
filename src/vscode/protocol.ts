@@ -1,9 +1,13 @@
-// The wire protocol between the Incremental Diff server and its clients:
-// JSON-RPC 2.0, one JSON object per line on stdin / stdout (see
-// docs/server.md). These types are the contract; the Lua client
-// (lua/incremental_diff/client.lua) speaks them too.
+// The wire protocol of the core, incremental-diff (cmd/incremental-diff):
+// JSON-RPC 2.0, one JSON object per line on stdin / stdout (docs/server.md).
+// The Go server's types (internal/server/protocol.go) are the contract; the
+// Lua client (lua/incremental_diff/client.lua) speaks them too.
 
 export const protocolVersion = 1;
+
+export type FileStatus = "A" | "M" | "D" | "R" | "C" | "T" | "U";
+
+export type ReviewStatus = "unreviewed" | "reviewed" | "changed";
 
 /** One side of the diff as resolved when the review was opened or refreshed. */
 export type WireSide =
@@ -16,7 +20,7 @@ export interface WireFile {
   path: string;
   /** Left-side path of a rename or copy. */
   oldPath?: string;
-  status: "A" | "M" | "D" | "R" | "C" | "T" | "U";
+  status: FileStatus;
   untracked?: boolean;
   /** Blob of the left side; absent when it is empty (added). */
   oldBlob?: string;
@@ -26,7 +30,7 @@ export interface WireFile {
   deleted?: number;
   binary?: boolean;
   /** unreviewed | reviewed | changed (since it was reviewed). */
-  review: "unreviewed" | "reviewed" | "changed";
+  review: ReviewStatus;
   /** When reviewed: the right side's blob then ("deleted" for a deletion) and when. */
   snapshot?: string;
   reviewedAt?: string;
@@ -45,37 +49,19 @@ export interface WireReview {
   error?: string;
 }
 
-export interface WireCommit {
-  sha: string;
-  short: string;
-  author: string;
-  date: string;
-  subject: string;
-  /** The file's path in this commit (before a later rename). */
-  path: string;
-}
+/** The snapshot of a file reviewed while deleted. */
+export const DELETED = "deleted";
 
 /** Requests: method → [params, result]. */
 export interface Methods {
   initialize: [{ client?: string }, { name: string; version: string; protocol: number }];
-  /** Opens a review of the repository containing `root` (any folder in it). */
   "review/open": [{ root: string; input?: string; branch?: boolean; baseBranch?: string; stats?: boolean }, WireReview];
   "review/get": [{ id: number }, WireReview];
   "review/refresh": [{ id: number }, WireReview];
   "review/setReviewed": [{ id: number; paths: string[]; reviewed: boolean }, WireReview & { warning?: string }];
   "review/clearReviewed": [{ id: number }, WireReview];
   "review/close": [{ id: number }, null];
-  /** A blob's text (`binary` when it holds a NUL byte, and then no text). */
   "git/blob": [{ root: string; blob: string }, { text?: string; binary?: boolean }];
-  /** Commits that touched `path`, newest first, following renames. */
-  "git/log": [{ root: string; path: string; limit?: number }, WireCommit[]];
-  /** The `git diff` arguments opened before in this repository, most recent first. */
   "history/list": [{ root: string }, string[]];
   "history/remove": [{ root: string; input: string }, string[]];
-}
-
-/** Notifications from the server: method → params. */
-export interface Notifications {
-  /** A review's files or their state changed (a refresh, a mark, git's state). */
-  "review/changed": WireReview;
 }
