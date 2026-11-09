@@ -181,7 +181,7 @@ drawn on it as extmarks:
 - Deleted lines are virtual lines above what replaced them, old then new, as
   a unified diff reads. They keep their syntax colours on `DiffDelete`'s
   ground and take no line numbers: they are not in the buffer. In DevHub
-  they stay in the grid's face (`gui.content_namespace`).
+  they stay in the grid's face, as every plugin's virtual text does.
 - The hunks come from `vim.diff()` with your `diffopt` (algorithm,
   linematch, whitespace), so they are the split view's hunks. `]c`/`[c` move
   between them.

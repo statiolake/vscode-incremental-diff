@@ -6,8 +6,8 @@
 --
 -- Deleted lines are code, so they keep the old side's syntax colours (from
 -- its buffer's treesitter highlights, or its 'syntax' items) on the
--- deletion's ground. In DevHub's GUI the namespace is declared content, so
--- they stay in the grid's face (gui.content_namespace).
+-- deletion's ground. DevHub draws a plugin's virtual lines as cells in the
+-- grid's face, as the buffer's own, with nothing to declare.
 
 local hunks_mod = require 'incremental_diff.hunks'
 
@@ -15,11 +15,6 @@ local M = {}
 
 M.ns = vim.api.nvim_create_namespace 'incremental_diff_inline'
 M.since_ns = vim.api.nvim_create_namespace 'incremental_diff_since'
-
-local ok_devhub, devhub = pcall(require, 'devhub')
-if ok_devhub and devhub.gui and devhub.gui.content_namespace then
-  devhub.gui.content_namespace(M.ns)
-end
 
 --- Syntax highlight spans of buf's line row (0-based): { { from, to, group }, ... }.
 local function line_spans(buf, row)
