@@ -1,5 +1,6 @@
--- The server process and its JSON-RPC: one per Neovim, started on first use
--- and ended with Neovim (its stdin closes). See docs/server.md.
+-- The core's process (`incremental-diff serve`) and its JSON-RPC: one per
+-- Neovim, started on first use and ended with Neovim (its stdin closes).
+-- See docs/server.md.
 
 local M = {}
 
@@ -15,13 +16,22 @@ vim.api.nvim_create_autocmd('VimLeavePre', {
   end,
 })
 
---- The bundled server, next to this plugin's lua/ directory.
-function M.server_path()
-  local here = debug.getinfo(1, 'S').source:sub(2)
-  return vim.fn.fnamemodify(here, ':h:h:h') .. '/server/incremental-diff-server.js'
-end
+--- The core, incremental-diff: `cmd` when set (setup), else
+--- bin/<os>-<arch>/incremental-diff of this plugin, where build.lua puts it.
+M.cmd = nil
 
-M.node = 'node'
+function M.executable()
+  if M.cmd then
+    return M.cmd
+  end
+  local here = debug.getinfo(1, 'S').source:sub(2)
+  local root = vim.fn.fnamemodify(here, ':p:h:h:h')
+  local uname = vim.uv.os_uname()
+  local os_name = ({ Linux = 'linux', Darwin = 'darwin', Windows_NT = 'windows' })[uname.sysname] or uname.sysname:lower()
+  local arch = ({ x86_64 = 'amd64', amd64 = 'amd64', arm64 = 'arm64', aarch64 = 'arm64' })[uname.machine] or uname.machine
+  local name = os_name == 'windows' and 'incremental-diff.exe' or 'incremental-diff'
+  return table.concat({ root, 'bin', os_name .. '-' .. arch, name }, '/')
+end
 
 -- $INCREMENTAL_DIFF_LOG: a file the messages both ways are appended to.
 local function log(dir, line)
@@ -67,15 +77,12 @@ local function start()
   if job then
     return true
   end
-  if vim.fn.executable(M.node) == 0 then
-    return false, ('incremental-diff needs Node.js (%s is not on PATH)'):format(M.node)
-  end
-  local path = M.server_path()
-  if vim.fn.filereadable(path) == 0 then
-    return false, 'incremental-diff: the server is missing: ' .. path
+  local cmd = M.executable()
+  if vim.fn.executable(cmd) == 0 then
+    return false, ('incremental-diff: %s is not built (:Lazy build vscode-incremental-diff)'):format(cmd)
   end
   buffered = ''
-  local id = vim.fn.jobstart({ M.node, path }, {
+  local id = vim.fn.jobstart({ cmd, 'serve' }, {
     on_stdout = function(_, data)
       -- data: the chunk split at newlines; the first piece continues the last.
       data[1] = buffered .. data[1]
@@ -107,7 +114,7 @@ local function start()
     end,
   })
   if id <= 0 then
-    return false, 'incremental-diff: could not start ' .. M.node
+    return false, 'incremental-diff: could not start ' .. cmd
   end
   job = id
   return true

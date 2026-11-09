@@ -107,9 +107,14 @@ code --install-extension vscode-incremental-diff-0.1.0.vsix
 
 ## Neovim
 
-The Neovim frontend is a client of the same core. It runs as
-`server/incremental-diff-server.js`, a child of Neovim that speaks JSON-RPC
-over stdio. It needs Neovim 0.10 or later and Node.js 18 or later on `PATH`.
+The Neovim frontend is a client of the same core, `incremental-diff`: one
+Go binary, started as a child of Neovim that speaks JSON-RPC over stdio. It
+needs Neovim 0.10 or later and nothing else at run time: no Node.js.
+
+lazy.nvim runs the plugin's `build.lua` on install and update, which puts
+the binary at `bin/<os>-<arch>/incremental-diff`. For now it builds it from
+the plugin's source, so building needs [Go](https://go.dev/dl/) 1.24 or
+later (`:Lazy build vscode-incremental-diff` builds it again).
 
 ```lua
 -- lazy.nvim
@@ -212,7 +217,7 @@ require('incremental_diff').setup {
   list_mode = 'tree',      -- or 'flat'
   since_viewed = true,     -- a file changed since viewed opens with only those changes
   base_branch = '',        -- for :IncDiffBranch; empty: the branch HEAD forked from
-  node = 'node',
+  cmd = nil,               -- the core's executable; nil: bin/<os>-<arch>/incremental-diff of the plugin
   keys = { next_file = '<Tab>', prev_file = '<S-Tab>', toggle_layout = 'gL', toggle_since = 'gS',
            viewed_next = 'gV', next_hunk = ']c', prev_hunk = '[c',
            close = false, focus_panel = false },   -- e.g. close = 'q'; false: none
@@ -232,10 +237,10 @@ it):
 
 ```bash
 npm install
-npm test               # the core, the server, the extension (and that server/ is up to date)
+npm test               # the extension, the core (go test) and the Neovim frontend
 npm run build          # the extension
-npm run build:server   # server/incremental-diff-server.js
-test/nvim/run.sh       # the Neovim frontend, headless (NVIM=/path/to/nvim)
+go test ./...          # the core and its server (Go)
+test/nvim/run.sh       # the Neovim frontend, headless, after building the core with build.lua (NVIM=/path/to/nvim)
 ```
 
 Press F5 in VS Code to launch an Extension Development Host. `npm run package` type-checks, bundles, and creates a VSIX.

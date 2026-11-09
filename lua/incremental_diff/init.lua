@@ -2,8 +2,8 @@
 --
 -- Review a git diff file by file, mark files viewed, and when a viewed file
 -- changes see only what changed since. The diff, the files and the marks
--- come from the Incremental Diff server (the same core as the VS Code
--- extension, over JSON-RPC); this is the Neovim face of it. See README.md.
+-- come from the core, incremental-diff (the same as the VS Code extension's,
+-- over JSON-RPC); this is the Neovim face of it. See README.md.
 
 local M = {}
 
@@ -46,17 +46,17 @@ vim.api.nvim_create_autocmd('ColorScheme', {
 
 --- Options (all optional):
 ---   width = 40, layout = 'split' | 'inline', list_mode = 'tree' | 'flat',
----   since_viewed = true, base_branch = '', node = 'node', refresh_delay = 200,
+---   since_viewed = true, base_branch = '', cmd = nil (the core: bin/ of this plugin), refresh_delay = 200,
 ---   keys = { next_file, prev_file, toggle_layout, toggle_since, viewed_next,
 ---            next_hunk, prev_hunk, close, focus_panel } (false: none)
 function M.setup(opts)
   opts = opts or {}
   local review = require 'incremental_diff.review'
-  if opts.node then
-    require('incremental_diff.client').node = opts.node
+  if opts.cmd then
+    require('incremental_diff.client').cmd = opts.cmd
   end
   review.config = vim.tbl_deep_extend('force', review.config, opts)
-  review.config.node = nil
+  review.config.cmd = nil
   return M
 end
 

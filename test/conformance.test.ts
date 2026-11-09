@@ -16,8 +16,8 @@ const fixture = JSON.parse(readFileSync(join(repoRoot, "test", "conformance", "p
   scenarios: Array<{ name: string; steps: Array<Record<string, any>> }>;
 };
 
-/** The server under test. */
-const serverCommand = (): [string, string[]] => [process.execPath, [join(repoRoot, "server", "incremental-diff-server.js")]];
+/** The server under test: the TypeScript one (src/server), compiled. */
+const serverCommand = (): [string, string[]] => [process.execPath, [join(repoRoot, "dist-test", "src", "server", "main.js")]];
 
 class Client {
   readonly child: ChildProcessByStdio<Writable, Readable, null>;

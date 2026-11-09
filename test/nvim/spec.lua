@@ -1,4 +1,4 @@
--- nvim --headless: the Neovim frontend against the bundled server and a
+-- nvim --headless: the Neovim frontend against the core (bin/) and a
 -- throwaway repository. Run by test/nvim/run.sh; leaves Neovim with an
 -- error on failure.
 local failures = {}

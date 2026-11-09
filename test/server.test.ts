@@ -1,8 +1,6 @@
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { createInterface } from "node:readline";
 import { after, test } from "node:test";
 import { parseNumstat } from "../src/core/diff";
 import { git } from "../src/core/git";
@@ -64,31 +62,4 @@ test("the service opens reviews, marks files and keeps state in the git director
   assert.equal(await service.handle("review/close", { id: review.id }), null);
   service.dispose();
   other.dispose();
-});
-
-test("the bundled server speaks JSON-RPC over stdio", async () => {
-  const bundle = join(__dirname, "..", "..", "server", "incremental-diff-server.js");
-  assert.ok(readFileSync(bundle, "utf8").startsWith("#!/usr/bin/env node"));
-  const child = spawn(process.execPath, [bundle], { stdio: ["pipe", "pipe", "inherit"] });
-  const lines = createInterface({ input: child.stdout });
-  const waiting = new Map<number, (message: any) => void>();
-  lines.on("line", line => {
-    const message = JSON.parse(line);
-    if (message.id !== undefined) waiting.get(message.id)?.(message);
-  });
-  let next = 1;
-  const request = (method: string, params: unknown) => new Promise<any>(resolve => {
-    const id = next++;
-    waiting.set(id, resolve);
-    child.stdin.write(JSON.stringify({ jsonrpc: "2.0", id, method, params }) + "\n");
-  });
-  const init = await request("initialize", {});
-  assert.equal(init.result.protocol, 1);
-  const open = await request("review/open", { root: repo.root, input: "HEAD" });
-  assert.equal(open.result.files[0].path, "a.txt");
-  const bad = await request("nope", {});
-  assert.equal(bad.error.code, -32602);
-  const exited = new Promise(resolve => child.on("exit", resolve));
-  child.stdin.end();
-  assert.equal(await exited, 0);
 });
