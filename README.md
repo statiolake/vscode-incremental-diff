@@ -114,9 +114,17 @@ Go binary, started as a child of Neovim that speaks JSON-RPC over stdio. It
 needs Neovim 0.10 or later and nothing else at run time: no Node.js.
 
 lazy.nvim runs the plugin's `build.lua` on install and update, which puts
-the binary at `bin/<os>-<arch>/incremental-diff`. For now it builds it from
-the plugin's source, so building needs [Go](https://go.dev/dl/) 1.24 or
-later (`:Lazy build vscode-incremental-diff` builds it again).
+the binary at `bin/<os>-<arch>/incremental-diff`
+(`:Lazy build vscode-incremental-diff` puts it there again). It downloads
+the prebuilt core of the plugin's version from its
+[GitHub release](https://github.com/statiolake/vscode-incremental-diff/releases)
+(macOS arm64, Linux x86_64 and arm64), checked against the release's
+`SHA256SUMS`, with `curl` and `tar`. It builds the core from the plugin's
+source instead, which needs [Go](https://go.dev/dl/) 1.24 or later, when the
+checkout's core differs from the release's (a commit past the release) and
+Go is installed, when the download fails or the platform has no prebuilt
+core, or when `vim.g.incremental_diff_build = 'source'` (or
+`INCREMENTAL_DIFF_BUILD=source`); `'prebuilt'` always takes the release's.
 
 ```lua
 -- lazy.nvim
@@ -248,7 +256,8 @@ npm install
 npm test               # the extension, the core (go test) and the Neovim frontend (needs Go 1.24+)
 npm run build          # the core for this machine (bin/<os>-<arch>/) and the extension
 go test ./...          # the core and its server (Go)
-test/nvim/run.sh       # the Neovim frontend, headless; builds the core with build.lua first (NVIM=/path/to/nvim)
+test/nvim/run.sh       # the Neovim frontend, headless; builds the core from source with build.lua first (NVIM=/path/to/nvim)
+scripts/release-assets.sh  # the release's prebuilt cores and SHA256SUMS, into release/
 ```
 
 Press F5 in VS Code to launch an Extension Development Host. `npm run package` type-checks, builds the core for every shipped platform, bundles, and creates a VSIX.

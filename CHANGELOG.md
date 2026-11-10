@@ -7,7 +7,7 @@
   - file history.
 - The logic is one core, `incremental-diff`, a Go binary speaking JSON-RPC on stdio (docs/server.md), shared by both frontends:
   - the VS Code extension runs it from the VSIX, which carries it for macOS arm64 and Linux x86_64 / arm64;
-  - the Neovim plugin's `build.lua` builds it (needs Go for now); Neovim needs no Node.js.
+  - the Neovim plugin's `build.lua` downloads it from the GitHub release (`incremental-diff-<os>-<arch>.tar.gz`, checked against `SHA256SUMS`), or builds it with Go when the checkout is past the release or no prebuilt core fits; Neovim needs no Node.js.
 - Reviewed marks and the input history are kept in the repository (`.git/incremental-diff/state.json`), shared by VS Code, Neovim and every window on it. Marks VS Code 0.1 kept in its workspace state are not carried over.
 - `X^!` on a root commit compares it with nothing instead of failing.
 

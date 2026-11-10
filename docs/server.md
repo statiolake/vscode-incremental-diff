@@ -40,10 +40,16 @@ in VS Code's extension host and, for Neovim, as a bundled script under
   and nothing to keep in step. [vscode-review-relay](https://github.com/statiolake/vscode-review-relay)
   is built the same way.
 
-For Neovim, `build.lua` (run by lazy.nvim on install and update) builds
-the core from the plugin's own source for now, which needs Go. A prebuilt
-binary fetched per platform and checked by sha256 replaces its
-`from_source` step and nothing else: the frontends only look for the
+For Neovim, `build.lua` (run by lazy.nvim on install and update) installs
+the prebuilt core of the plugin's version: tag `v<version>` (package.json's)
+has a GitHub release with `incremental-diff-<os>-<arch>.tar.gz` for
+darwin-arm64, linux-amd64 and linux-arm64 and their `SHA256SUMS`, which
+`.github/workflows/release.yml` builds (`scripts/release-assets.sh`) and
+publishes when the tag is pushed. `build.lua` checks the archive's sha256
+and that the core reports the version. It builds the core from the
+plugin's own source with Go instead when the checkout's `cmd/`,
+`internal/`, `go.mod` or `go.sum` differ from the tag's, or when there is
+no prebuilt core to install. Either way the frontends only look for the
 executable at `bin/<os>-<arch>/incremental-diff`.
 
 ## Why a long-lived process over stdio
