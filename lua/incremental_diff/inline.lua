@@ -137,7 +137,17 @@ function M.draw(buf, old_lines, old_buf, width)
       if oc == 0 then
         group = 'IncDiffAdd'
       end
-      vim.api.nvim_buf_set_extmark(buf, M.ns, row, 0, { line_hl_group = group, priority = 50 })
+      -- The line's colour as a range to the end of the line, not line_hl_group:
+      -- a line_hl_group background wins over every hl_group background, so the
+      -- changed words (IncDiffText, below) would lose theirs.
+      vim.api.nvim_buf_set_extmark(buf, M.ns, row, 0, {
+        end_row = row + 1,
+        end_col = 0,
+        hl_group = group,
+        hl_eol = true,
+        priority = 50,
+        strict = false,
+      })
       if i < pairs_n and oc > 0 then
         local _, new_word = hunks_mod.words(old_lines[os + i] or '', new_lines[ns + i] or '')
         if new_word[2] > new_word[1] then

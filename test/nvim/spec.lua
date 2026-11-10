@@ -103,7 +103,8 @@ for _, m in ipairs(marks) do
   if m[4].virt_lines then
     virt = virt + #m[4].virt_lines
   end
-  if m[4].line_hl_group then
+  -- A whole line's colour: a range to the next line's start, to the end of the line.
+  if m[4].hl_eol and (m[4].hl_group == 'IncDiffChange' or m[4].hl_group == 'IncDiffAdd') then
     lines_hl = lines_hl + 1
   end
 end
