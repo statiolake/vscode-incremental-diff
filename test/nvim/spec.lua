@@ -46,6 +46,52 @@ vim.cmd('edit ' .. root .. '/a.lua')
 vim.keymap.set('n', 'gS', '<Nop>', { buffer = 0, desc = 'mine' })
 vim.cmd 'enew'
 local idiff = require('incremental_diff').setup {}
+-- IncDiffDeleteText: a stronger red than DiffDelete, recomputed per colorscheme.
+local function hl(name)
+  return vim.api.nvim_get_hl(0, { name = name, link = false })
+end
+vim.cmd 'highlight clear'
+vim.api.nvim_set_hl(0, 'Normal', { bg = 0x121314 })
+vim.api.nvim_set_hl(0, 'DiffDelete', { fg = 0xeeeeee, bg = 0x341b1b })
+vim.api.nvim_exec_autocmds('ColorScheme', {})
+check(hl('IncDiffDeleteText').bg == 0x562322, 'DiffDelete\'s step from Normal, doubled: ' .. string.format('%06x', hl('IncDiffDeleteText').bg or 0))
+check(hl('IncDiffDeleteText').fg == 0xeeeeee, 'DiffDelete\'s colour kept')
+check(vim.api.nvim_get_hl(0, { name = 'IncDiffText' }).link == 'DiffText', 'IncDiffText still DiffText')
+vim.cmd 'highlight clear'
+vim.api.nvim_set_hl(0, 'Normal', { bg = 0x000000 })
+vim.api.nvim_set_hl(0, 'DiffDelete', { fg = 0xff0000, bold = true })
+vim.api.nvim_exec_autocmds('ColorScheme', {})
+check(hl('IncDiffDeleteText').bg == 0x400000 and hl('IncDiffDeleteText').bold, 'no ground: a quarter of its colour, bold kept')
+vim.cmd 'highlight clear'
+vim.api.nvim_set_hl(0, 'IncDiffDeleteText', { bg = 0x123456 })
+vim.api.nvim_exec_autocmds('ColorScheme', {})
+check(hl('IncDiffDeleteText').bg == 0x123456, 'a colorscheme\'s own IncDiffDeleteText wins')
+vim.cmd 'highlight clear'
+vim.api.nvim_exec_autocmds('ColorScheme', {})
+-- The changed word: on the deleted line IncDiffDeleteText, on the new one IncDiffText.
+do
+  local inline = require 'incremental_diff.inline'
+  local b = vim.api.nvim_create_buf(false, true)
+  vim.api.nvim_buf_set_lines(b, 0, -1, false, { 'say goodbye now' })
+  inline.draw(b, { 'say hello now' }, nil, 20)
+  local del_word, add_word
+  for _, m in ipairs(vim.api.nvim_buf_get_extmarks(b, inline.ns, 0, -1, { details = true })) do
+    for _, vl in ipairs(m[4].virt_lines or {}) do
+      for _, chunk in ipairs(vl) do
+        local groups = type(chunk[2]) == 'table' and chunk[2] or { chunk[2] }
+        if vim.tbl_contains(groups, 'IncDiffDeleteText') then
+          del_word = chunk[1]
+        end
+      end
+    end
+    if m[4].hl_group == 'IncDiffText' then
+      add_word = vim.api.nvim_buf_get_text(b, m[2], m[3], m[4].end_row or m[2], m[4].end_col, {})[1]
+    end
+  end
+  check(del_word == 'hello', 'the deleted word in IncDiffDeleteText: ' .. tostring(del_word))
+  check(add_word == 'goodbye', 'the added word in IncDiffText: ' .. tostring(add_word))
+  vim.api.nvim_buf_delete(b, { force = true })
+end
 local review = require 'incremental_diff.review'
 idiff.open 'HEAD'
 wait(function()

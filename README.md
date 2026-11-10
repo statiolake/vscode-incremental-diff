@@ -232,7 +232,12 @@ Highlight groups (each links to the group named, unless your colorscheme sets
 it):
 
 - `IncDiffAdd` → `DiffAdd`, `IncDiffChange` → `DiffChange`, `IncDiffText` → `DiffText`
-- `IncDiffDelete` → `DiffDelete`, `IncDiffDeleteText` → `DiffText`
+- `IncDiffDelete` → `DiffDelete`
+- `IncDiffDeleteText` (the changed words on a deleted line) is not a link: it
+  is a stronger red over the deleted line's, as VS Code draws removed text over
+  a removed line. Unless your colorscheme sets it, it is `DiffDelete` with its
+  background's step from `Normal`'s doubled (a `DiffDelete` with no background:
+  a quarter of its foreground over `Normal`'s), recomputed on `:colorscheme`.
 - `IncDiffSinceViewed` → `DiagnosticWarn`
 - `IncDiffStatusAdded` / `Modified` / `Deleted` → `Added` / `Changed` / `Removed`
 

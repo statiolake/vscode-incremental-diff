@@ -7,13 +7,42 @@
 
 local M = {}
 
+--- The changed words on a deleted line: a stronger red over the line's, as
+--- VS Code draws removed text over a removed line. A colorscheme that sets
+--- IncDiffDeleteText wins; otherwise it is DiffDelete with its ground's step
+--- from Normal's doubled (with no ground, a quarter of DiffDelete's colour
+--- over Normal's), its colour and boldness kept.
+local function delete_text()
+  local del = vim.api.nvim_get_hl(0, { name = 'DiffDelete', link = false })
+  local normal = vim.api.nvim_get_hl(0, { name = 'Normal', link = false }).bg
+    or (vim.o.background == 'light' and 0xffffff or 0x000000)
+  local function mix(to, t)
+    local out = 0
+    for shift = 16, 0, -8 do
+      local a, b = bit.band(bit.rshift(normal, shift), 0xff), bit.band(bit.rshift(to, shift), 0xff)
+      out = out + bit.lshift(math.max(0, math.min(255, math.floor(a + (b - a) * t + 0.5))), shift)
+    end
+    return out
+  end
+  local bg
+  if del.bg then
+    bg = mix(del.bg, 2)
+  elseif del.fg then
+    bg = mix(del.fg, 0.25)
+  else
+    return { link = 'DiffText' }
+  end
+  local hl = vim.deepcopy(del)
+  hl.bg = bg
+  return hl
+end
+
 local function highlights()
   local links = {
     IncDiffAdd = 'DiffAdd',
     IncDiffChange = 'DiffChange',
     IncDiffText = 'DiffText',
     IncDiffDelete = 'DiffDelete',
-    IncDiffDeleteText = 'DiffText',
     IncDiffSinceViewed = 'DiagnosticWarn',
     IncDiffStatusAdded = 'Added',
     IncDiffStatusModified = 'Changed',
@@ -36,6 +65,7 @@ local function highlights()
     end
     vim.api.nvim_set_hl(0, group, { link = target, default = true })
   end
+  vim.api.nvim_set_hl(0, 'IncDiffDeleteText', vim.tbl_extend('force', delete_text(), { default = true }))
 end
 
 highlights()
