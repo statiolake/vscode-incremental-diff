@@ -99,7 +99,7 @@ Useful `when` contexts: `incrementalDiff.active` (a review is open), `incrementa
 
 ## Install
 
-Download `vscode-incremental-diff-<version>.vsix` from the [releases](https://github.com/statiolake/vscode-incremental-diff/releases), or build it yourself (see below), then run **Extensions: Install from VSIX…** or:
+Download `vscode-incremental-diff-<version>.vsix` from the [releases](https://github.com/statiolake/vscode-incremental-diff/releases) when one is attached there, or build it yourself with `npm run package` (see below), then run **Extensions: Install from VSIX…** or:
 
 ```bash
 code --install-extension vscode-incremental-diff-0.2.0.vsix
@@ -113,18 +113,14 @@ The Neovim frontend is a client of the same core, `incremental-diff`: one
 Go binary, started as a child of Neovim that speaks JSON-RPC over stdio. It
 needs Neovim 0.10 or later and nothing else at run time: no Node.js.
 
-lazy.nvim runs the plugin's `build.lua` on install and update, which puts
-the binary at `bin/<os>-<arch>/incremental-diff`
-(`:Lazy build vscode-incremental-diff` puts it there again). It downloads
-the prebuilt core of the plugin's version from its
-[GitHub release](https://github.com/statiolake/vscode-incremental-diff/releases)
-(macOS arm64, Linux x86_64 and arm64), checked against the release's
-`SHA256SUMS`, with `curl` and `tar`. It builds the core from the plugin's
-source instead, which needs [Go](https://go.dev/dl/) 1.24 or later, when the
-checkout's core differs from the release's (a commit past the release) and
-Go is installed, when the download fails or the platform has no prebuilt
-core, or when `vim.g.incremental_diff_build = 'source'` (or
-`INCREMENTAL_DIFF_BUILD=source`); `'prebuilt'` always takes the release's.
+The plugin carries the core prebuilt for every platform it supports, in
+`bin/<os>-<arch>/incremental-diff` (macOS arm64, Linux x86_64 and arm64),
+committed to the repository, and runs the one for the platform it is on.
+Installing it is only getting the files: lazy.nvim needs no `build`, and
+copying the plugin's directory to another machine (an SSH host, say) is
+enough there too, with no Go, compiler or network. On another platform it
+says which ones it has; build a core with `scripts/build-bins.sh` from a
+checkout, or point `cmd` (below) at one.
 
 ```lua
 -- lazy.nvim
@@ -256,9 +252,21 @@ npm install
 npm test               # the extension, the core (go test) and the Neovim frontend (needs Go 1.24+)
 npm run build          # the core for this machine (bin/<os>-<arch>/) and the extension
 go test ./...          # the core and its server (Go)
-test/nvim/run.sh       # the Neovim frontend, headless; builds the core from source with build.lua first (NVIM=/path/to/nvim)
-scripts/release-assets.sh  # the release's prebuilt cores and SHA256SUMS, into release/
+test/nvim/run.sh       # the Neovim frontend, headless, on the core in bin/ (INCREMENTAL_DIFF_BUILD=source rebuilds it first; NVIM=/path/to/nvim)
+scripts/build-bins.sh  # the core for every platform, into bin/ (--check: fail unless bin/ matches the source)
 ```
+
+`bin/` is committed: it is what installs run. After changing the core
+(`cmd/`, `internal/`, `go.mod`, `go.sum`), run `scripts/build-bins.sh` and
+commit `bin/` with the change. The build is reproducible (no cgo,
+`-trimpath`, no VCS stamp, stripped, one pinned Go release that Go fetches
+if yours differs), so the same source gives the same bytes on any machine.
+On `main`, `.github/workflows/bin.yml` does it for you: a push that changes
+the core and not `bin/` gets a bot commit with the rebuilt `bin/`.
+`.github/workflows/bin-check.yml` fails a pull request (or a push touching
+`bin/`) whose `bin/` is not what its source builds. With lazy.nvim on a
+checkout of your own (`dir = …`), `build = 'scripts/build-bins.sh host'`
+rebuilds the core there on each update.
 
 Press F5 in VS Code to launch an Extension Development Host. `npm run package` type-checks, builds the core for every shipped platform, bundles, and creates a VSIX.
 

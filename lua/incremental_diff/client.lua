@@ -16,10 +16,15 @@ vim.api.nvim_create_autocmd('VimLeavePre', {
   end,
 })
 
---- The core, incremental-diff: `cmd` when set (setup), else
---- bin/<os>-<arch>/incremental-diff of this plugin, where build.lua puts it.
+--- The core, incremental-diff: `cmd` when set (setup), else the one this
+--- plugin ships for this platform, bin/<os>-<arch>/incremental-diff
+--- (committed to the repository: nothing is built or downloaded).
 M.cmd = nil
 
+--- The platforms bin/ carries (scripts/build-bins.sh).
+M.platforms = { 'darwin-arm64', 'linux-amd64', 'linux-arm64' }
+
+--- The executable to run, or nil and why not.
 function M.executable()
   if M.cmd then
     return M.cmd
@@ -29,8 +34,23 @@ function M.executable()
   local uname = vim.uv.os_uname()
   local os_name = ({ Linux = 'linux', Darwin = 'darwin', Windows_NT = 'windows' })[uname.sysname] or uname.sysname:lower()
   local arch = ({ x86_64 = 'amd64', amd64 = 'amd64', arm64 = 'arm64', aarch64 = 'arm64' })[uname.machine] or uname.machine
-  local name = os_name == 'windows' and 'incremental-diff.exe' or 'incremental-diff'
-  return table.concat({ root, 'bin', os_name .. '-' .. arch, name }, '/')
+  local platform = os_name .. '-' .. arch
+  if not vim.tbl_contains(M.platforms, platform) then
+    return nil,
+      ('incremental-diff: no core for this platform (%s); this plugin ships %s. Build one with `scripts/build-bins.sh` from a checkout, or set cmd in setup()'):format(
+        platform,
+        table.concat(M.platforms, ', ')
+      )
+  end
+  local path = table.concat({ root, 'bin', platform, 'incremental-diff' }, '/')
+  if vim.fn.filereadable(path) == 0 then
+    return nil, ('incremental-diff: %s is missing; the plugin\'s directory is incomplete (reinstall or copy it again)'):format(path)
+  end
+  if vim.fn.executable(path) == 0 then
+    -- A copy that dropped the mode bits (an archive, a file sync).
+    vim.uv.fs_chmod(path, tonumber('755', 8))
+  end
+  return path
 end
 
 -- $INCREMENTAL_DIFF_LOG: a file the messages both ways are appended to.
@@ -77,9 +97,12 @@ local function start()
   if job then
     return true
   end
-  local cmd = M.executable()
+  local cmd, why = M.executable()
+  if not cmd then
+    return false, why
+  end
   if vim.fn.executable(cmd) == 0 then
-    return false, ('incremental-diff: %s is not built (:Lazy build vscode-incremental-diff)'):format(cmd)
+    return false, ('incremental-diff: %s is not executable'):format(cmd)
   end
   buffered = ''
   local id = vim.fn.jobstart({ cmd, 'serve' }, {

@@ -1,12 +1,15 @@
 #!/bin/sh
-# The Neovim frontend's headless tests against the real core: build.lua
-# builds bin/<os>-<arch>/incremental-diff first from this checkout's source
-# (needs Go; INCREMENTAL_DIFF_BUILD=auto installs the release's as lazy.nvim
-# would). NVIM=path/to/nvim picks the Neovim (default: nvim on PATH).
+# The Neovim frontend's headless tests against the real core: the one the
+# plugin ships, bin/<os>-<arch>/incremental-diff, as an install runs it.
+# INCREMENTAL_DIFF_BUILD=source rebuilds that from this checkout's source
+# first (scripts/build-bins.sh host; needs Go), for testing a change to the
+# core. NVIM=path/to/nvim picks the Neovim (default: nvim on PATH).
 set -eu
 cd "$(dirname "$0")/../.."
 NVIM="${NVIM:-nvim}"
-INCREMENTAL_DIFF_BUILD="${INCREMENTAL_DIFF_BUILD:-source}" "$NVIM" --headless --clean -l build.lua
+if [ "${INCREMENTAL_DIFF_BUILD:-}" = source ]; then
+  scripts/build-bins.sh host
+fi
 "$NVIM" --headless --clean --cmd "set rtp^=$PWD" \
   -c "lua local ok, e = pcall(dofile, 'test/nvim/spec.lua'); if not ok then io.stderr:write('FAIL ' .. tostring(e) .. '\n'); vim.cmd 'cquit 1' end" \
   -c 'qall!' </dev/null

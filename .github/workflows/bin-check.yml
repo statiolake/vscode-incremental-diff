@@ -1,0 +1,32 @@
+# Fails when the committed cores in bin/ are not what the source builds
+# (scripts/build-bins.sh --check: a fresh, reproducible build compared byte
+# for byte). Fix it with scripts/build-bins.sh and commit bin/.
+#
+# On main, a push that changes the source without bin/ is fixed by
+# .github/workflows/bin.yml instead, so pushes are checked here only when
+# they touch bin/ itself.
+name: bin-check
+
+on:
+  pull_request:
+  push:
+    paths:
+      - "bin/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: bin/ is what the source builds
+        run: scripts/build-bins.sh --check
+      - name: The host's core runs as package.json's version
+        run: test "$(bin/linux-amd64/incremental-diff version)" = "$(jq -r .version package.json)"

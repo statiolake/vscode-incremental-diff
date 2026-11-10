@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- The Neovim plugin carries the core prebuilt for macOS arm64 and Linux x86_64 / arm64 in `bin/`, committed, and runs the one for its platform: installing it (lazy.nvim, or copying its directory) needs no build step, Go, curl or network. `build.lua` and the GitHub release of the cores are gone. On another platform the plugin says which ones it ships.
+- `scripts/build-bins.sh` rebuilds `bin/` reproducibly; `.github/workflows/bin.yml` commits a rebuilt `bin/` to `main` when the core changes, and `bin-check.yml` fails a pull request whose `bin/` does not match its source.
+
 ## 0.2.0
 
 - A Neovim frontend (`lua/`, `plugin/`), installable with lazy.nvim:

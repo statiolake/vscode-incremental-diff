@@ -1,0 +1,55 @@
+# Keeps the committed cores in bin/ in step with their source on main: when a
+# push to main changes the core (cmd/, internal/, go.mod, go.sum) or how it is
+# built, this rebuilds every target with scripts/build-bins.sh and, if bin/
+# differs, commits it back to main as github-actions[bot].
+#
+# No loop: the paths below leave out bin/, so the bot's own commit (bin/
+# only) does not match them; a push made with GITHUB_TOKEN starts no workflow
+# anyway; and the job skips a push by the bot.
+name: bin
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "cmd/**"
+      - "internal/**"
+      - "go.mod"
+      - "go.sum"
+      - "scripts/build-bins.sh"
+      - ".github/workflows/bin.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: bin-main
+  cancel-in-progress: true
+
+jobs:
+  sync:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Build bin/
+        run: scripts/build-bins.sh
+      - name: Commit bin/ if it changed
+        run: |
+          if [ -z "$(git status --porcelain -- bin)" ]; then
+            echo "bin/ is current"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- bin
+          git commit -m "bin: rebuild the core from $(git rev-parse --short HEAD)" \
+            -m "scripts/build-bins.sh ($(go env GOVERSION)), by .github/workflows/bin.yml."
+          git push origin HEAD:main

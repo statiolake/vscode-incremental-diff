@@ -13,7 +13,7 @@
  test/conformance/protocol.json   the protocol as scenarios (below)
  src/vscode/             the VS Code extension: a client of the core
  lua/incremental_diff/, plugin/   the Neovim frontend: a client of the core
- build.lua               lazy.nvim's build step: puts the core at bin/<os>-<arch>/
+ bin/<os>-<arch>/        the core, prebuilt per platform and committed (scripts/build-bins.sh)
 ```
 
 The boundary is the protocol below. Everything that decides something
@@ -40,17 +40,15 @@ in VS Code's extension host and, for Neovim, as a bundled script under
   and nothing to keep in step. [vscode-review-relay](https://github.com/statiolake/vscode-review-relay)
   is built the same way.
 
-For Neovim, `build.lua` (run by lazy.nvim on install and update) installs
-the prebuilt core of the plugin's version: tag `v<version>` (package.json's)
-has a GitHub release with `incremental-diff-<os>-<arch>.tar.gz` for
-darwin-arm64, linux-amd64 and linux-arm64 and their `SHA256SUMS`, which
-`.github/workflows/release.yml` builds (`scripts/release-assets.sh`) and
-publishes when the tag is pushed. `build.lua` checks the archive's sha256
-and that the core reports the version. It builds the core from the
-plugin's own source with Go instead when the checkout's `cmd/`,
-`internal/`, `go.mod` or `go.sum` differ from the tag's, or when there is
-no prebuilt core to install. Either way the frontends only look for the
-executable at `bin/<os>-<arch>/incremental-diff`.
+The builds are committed, in `bin/<os>-<arch>/incremental-diff`, and both
+frontends run the one for their platform from there: the VSIX packs
+`bin/`, and the Neovim plugin is installed (by lazy.nvim, or by copying its
+directory, to an SSH host for instance) with no build step, Go or network.
+`scripts/build-bins.sh` builds them reproducibly (no cgo, `-trimpath`, no
+VCS stamp, stripped, one pinned Go release), so a fresh build of the source
+is byte for byte the committed one: `.github/workflows/bin-check.yml`
+checks that, and `.github/workflows/bin.yml` commits a rebuilt `bin/` to
+`main` when a push there changes the core's source without it.
 
 ## Why a long-lived process over stdio
 
