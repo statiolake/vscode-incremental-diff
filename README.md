@@ -210,6 +210,7 @@ of the buffer):
 | `gL` | split ⇄ inline |
 | `gS` | changes since viewed ⇄ all changes |
 | `gV` | mark viewed and open the next file to review |
+| `g<Space>` | viewed / not viewed for the file shown (the panel's `<Space>`), the diff stays open |
 | `]c` / `[c` | (inline) next / previous hunk |
 
 ```lua
@@ -221,7 +222,7 @@ require('incremental_diff').setup {
   base_branch = '',        -- for :IncDiffBranch; empty: the branch HEAD forked from
   cmd = nil,               -- the core's executable; nil: bin/<os>-<arch>/incremental-diff of the plugin
   keys = { next_file = '<Tab>', prev_file = '<S-Tab>', toggle_layout = 'gL', toggle_since = 'gS',
-           viewed_next = 'gV', next_hunk = ']c', prev_hunk = '[c',
+           viewed_next = 'gV', toggle_viewed = 'g<Space>', next_hunk = ']c', prev_hunk = '[c',
            close = false, focus_panel = false },   -- e.g. close = 'q'; false: none
 }
 require('incremental_diff').focus_panel()  -- false when this tab page shows no review (for a <C-b> wrapper)

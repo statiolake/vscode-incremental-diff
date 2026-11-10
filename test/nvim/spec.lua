@@ -138,6 +138,19 @@ review.toggle_layout(R)
 check(vim.api.nvim_win_get_cursor(R.wins.right)[1] == 3, 'the left line maps to the new side')
 review.toggle_layout(R)
 
+-- g<Space> in a diff window: the shown file's mark, on and off, the diff stays.
+vim.api.nvim_set_current_win(R.wins.right)
+local shown_before = R.current
+vim.api.nvim_feedkeys(vim.keycode 'g<Space>', 'x', false)
+wait(function()
+  return R.files[1].review == 'reviewed'
+end, 'g<Space> marks the shown file viewed')
+check(R.current == shown_before, 'g<Space> keeps the file shown')
+vim.api.nvim_feedkeys(vim.keycode 'g<Space>', 'x', false)
+wait(function()
+  return R.files[1].review ~= 'reviewed'
+end, 'g<Space> again takes the mark off')
+
 -- Viewed, then changed since viewed.
 review.set_viewed(R, { 'a.lua' }, true)
 wait(function()

@@ -27,6 +27,7 @@ M.config = {
     toggle_layout = 'gL',
     toggle_since = 'gS',
     viewed_next = 'gV',
+    toggle_viewed = 'g<Space>', -- the shown file's viewed mark, as <Space> in the panel
     next_hunk = ']c', -- the inline view's; split uses diff mode's own
     prev_hunk = '[c',
     close = false,
@@ -250,6 +251,9 @@ local function bind_diff_keys(R, buf)
   keys.bind(buf, k.viewed_next, function()
     M.viewed_and_next(R)
   end, 'mark viewed and open the next file', active)
+  keys.bind(buf, k.toggle_viewed, function()
+    M.toggle_viewed_current(R)
+  end, 'viewed / not viewed', active)
   keys.bind(buf, k.close, function()
     M.close(R)
   end, 'close the review', active)
@@ -649,6 +653,20 @@ function M.toggle_viewed_entry(R, e)
       end
     end
     M.set_viewed(R, paths, not all)
+  end
+end
+
+--- The shown file's viewed mark, toggled from its diff windows (<Space> in the
+--- panel does the same for the file under the cursor). The diff stays open.
+function M.toggle_viewed_current(R)
+  R = R or M.current()
+  if not R or not R.current or R.history_path then
+    return
+  end
+  for _, f in ipairs(order(R)) do
+    if f.path == R.current then
+      return M.set_viewed(R, { f.path }, f.review ~= 'reviewed')
+    end
   end
 end
 
